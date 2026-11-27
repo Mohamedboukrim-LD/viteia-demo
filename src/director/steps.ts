@@ -48,8 +48,8 @@ export const steps: Record<string, Step[]> = {
       run: () => useDemoStore.getState().setRequestPhase("booking"),
     },
     {
-      label: "Create and start the experiment (POST /experiments, /start)",
-      run: () => useDemoStore.getState().setRequestPhase("starting"),
+      label: "Upload the site model, create and start the experiment (POST /assets, /experiments, /start)",
+      run: () => useDemoStore.getState().setRequestPhase("uploading"),
     },
     {
       label: "Go to the digital twin",

@@ -15,6 +15,9 @@ export type TelemetryBatch = components["schemas"]["TelemetryBatch"];
 export type TelemetrySample = components["schemas"]["TelemetrySample"];
 export type TelemetryEvent = components["schemas"]["TelemetryEvent"];
 export type ExperimentResults = components["schemas"]["ExperimentResults"];
+export type Asset = components["schemas"]["Asset"];
+export type AssetVersionList = components["schemas"]["AssetVersionList"];
+export type AssetVisibility = components["schemas"]["AssetVisibility"];
 
 // Mock: http://localhost:4010 (Prism). Real gateway: set VITE_API_BASE to ".../v1".
 const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4010";
@@ -57,6 +60,13 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function postForm<T>(path: string, form: FormData): Promise<T> {
+  // No Content-Type header: the browser sets multipart/form-data with the boundary.
+  const res = await fetch(`${BASE}${path}`, { method: "POST", headers: { Accept: "application/json" }, body: form });
+  if (!res.ok) throw await readError(res, "POST", path);
+  return (await res.json()) as T;
+}
+
 async function del(path: string): Promise<void> {
   const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
   if (!res.ok) throw await readError(res, "DELETE", path);
@@ -92,4 +102,16 @@ export const api = {
   getTelemetry: (id: string, since = 0) =>
     get<TelemetryBatch>(`/experiments/${id}/telemetry${since ? `?since=${since}` : ""}`),
   getResults: (id: string) => get<ExperimentResults>(`/experiments/${id}/results`),
+
+  uploadAsset: (file: File, meta: { name: string; visibility?: AssetVisibility; description?: string }) => {
+    const form = new FormData();
+    form.append("file", file, file.name);
+    form.append("name", meta.name);
+    if (meta.visibility) form.append("visibility", meta.visibility);
+    if (meta.description) form.append("description", meta.description);
+    return postForm<Asset>("/assets", form);
+  },
+  getAsset: (id: string) => get<Asset>(`/assets/${id}`),
+  listAssetVersions: (id: string) => get<AssetVersionList>(`/assets/${id}/versions`),
+  deleteAsset: (id: string) => del(`/assets/${id}`),
 };

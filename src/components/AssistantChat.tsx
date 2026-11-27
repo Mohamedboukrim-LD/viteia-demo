@@ -110,7 +110,7 @@ export function AssistantChat({
               {booking && <span className="chat__confirmed">Booking {booking.id}: {booking.status}</span>}
               {booking && !experiment && (
                 <button type="button" className="btn btn--primary" onClick={onStart} disabled={startPending}>
-                  {startPending ? "Starting…" : "Start the experiment"}
+                  {startPending ? (phase === "uploading" ? "Uploading the site model…" : "Starting…") : "Start the experiment"}
                 </button>
               )}
               {experiment && (

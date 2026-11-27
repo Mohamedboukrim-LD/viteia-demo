@@ -40,7 +40,7 @@ describe("api experiments", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
       jsonResponse(201, { id: "ex-1", status: "created" }),
     );
-    const request = EXPERIMENT_REQUEST("bk-1");
+    const request = EXPERIMENT_REQUEST("bk-1", ["as-1"]);
     const created = await api.createExperiment(request);
     expect(created.status).toBe("created");
     const [url, init] = fetchMock.mock.calls[0];
@@ -58,5 +58,25 @@ describe("api experiments", () => {
     expect(paths[0]).toMatch(/\/experiments\/ex-1\/start$/);
     expect(paths[1]).toMatch(/\/experiments\/ex-1\/stop$/);
     expect(fetchMock.mock.calls[0][1]?.body).toBeUndefined();
+  });
+});
+
+describe("api.uploadAsset", () => {
+  it("sends multipart form data with the file and its metadata", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      jsonResponse(201, { id: "as-1", status: "processing" }),
+    );
+    const file = new File([new Uint8Array(4)], "scene.glb", { type: "model/gltf-binary" });
+    const asset = await api.uploadAsset(file, { name: "scene", visibility: "booking" });
+    expect(asset.id).toBe("as-1");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/assets$/);
+    const form = init?.body as FormData;
+    expect(form).toBeInstanceOf(FormData);
+    expect((form.get("file") as File).name).toBe("scene.glb");
+    expect(form.get("name")).toBe("scene");
+    expect(form.get("visibility")).toBe("booking");
+    // The browser must set the multipart boundary itself.
+    expect((init?.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
   });
 });

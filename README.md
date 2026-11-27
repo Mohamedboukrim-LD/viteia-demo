@@ -63,8 +63,8 @@ src/styles/tokens.css     temporary design tokens, to be replaced by the final d
 | 1 | testbeds | done | done | Catalogue (scene 1) | tested |
 | 2 | bookings | done | done | Request (scene 2) | tested |
 | 3 | experiments | done | done | Request (scene 2), Digital twin (scene 3) | tested |
-| 4 | telemetry, results | done | done | Digital twin (scene 3), Results (scene 4) | ready for review |
-| 5 | assets | | | Request (scene 2, one line) | |
+| 4 | telemetry, results | done | done | Digital twin (scene 3), Results (scene 4) | tested |
+| 5 | assets | done | done | Request (scene 2, one line) | ready for review |
 | 6 | identity | | | none | |
 
 ## Decisions taken in tranche 1
@@ -117,3 +117,18 @@ src/styles/tokens.css     temporary design tokens, to be replaced by the final d
   model can replace it with drei's `useGLTF`. Models are a separate decision.
 - The documentation page is Swagger UI reading `openapi.yaml` itself, loaded
   only when the last step of scene 4 is reached.
+
+## Decisions taken in tranche 5
+
+- Assets are glTF 2.0 only (`.glb` or `.gltf`, no external references), so
+  every engine of every testbed can load them. Upload is multipart; the
+  federation validates and converts, and the status moves from `processing`
+  to `ready`.
+- Versions: a new upload with the same `name` creates a new version; an
+  experiment records the version it used.
+- Visibility decides which testbeds may read the file: `private`, `booking`
+  (the testbeds of the bookings the asset is used in, for their duration) or
+  `federation`.
+- In the demo the file is a 16-byte placeholder named `tunnel_entrance_v3.glb`;
+  the mock accepts any upload. The experiment request references the asset id
+  in `scenario.assetIds`.

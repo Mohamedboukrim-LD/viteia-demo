@@ -3,7 +3,7 @@ import { api, ApiError } from "../api/client";
 import { tracked } from "../api/log";
 import { ApiPanel } from "../components/ApiPanel";
 import { AssistantChat } from "../components/AssistantChat";
-import { ASSISTANT_REPLY, EXPERIMENT_REQUEST, PROPOSAL, USER_REQUEST } from "../data/proposal";
+import { ASSISTANT_REPLY, EXPERIMENT_REQUEST, PROPOSAL, SITE_MODEL, USER_REQUEST } from "../data/proposal";
 import { useDemoStore } from "../store/demoStore";
 import "./Request.css";
 
@@ -18,6 +18,8 @@ export function Request() {
   const setProposal = useDemoStore((s) => s.setProposal);
   const booking = useDemoStore((s) => s.booking);
   const setBooking = useDemoStore((s) => s.setBooking);
+  const asset = useDemoStore((s) => s.asset);
+  const setAsset = useDemoStore((s) => s.setAsset);
   const experiment = useDemoStore((s) => s.experiment);
   const setExperiment = useDemoStore((s) => s.setExperiment);
   const testbeds = useDemoStore((s) => s.testbeds);
@@ -55,11 +57,35 @@ export function Request() {
     };
   }, [phase, proposal, setBooking, setPhase]);
 
+  // Phase "uploading": POST /assets with the site model (multipart).
+  useEffect(() => {
+    if (phase !== "uploading") return;
+    let cancelled = false;
+    const file = new File([new Uint8Array(16)], SITE_MODEL.fileName, { type: "model/gltf-binary" });
+    const shown = { file: SITE_MODEL.fileName, contentType: file.type, name: SITE_MODEL.name, visibility: SITE_MODEL.visibility };
+    tracked({ method: "POST", path: "/assets", request: shown }, 201, () =>
+      api.uploadAsset(file, { name: SITE_MODEL.name, visibility: SITE_MODEL.visibility, description: SITE_MODEL.description }),
+    )
+      .then((a) => {
+        if (cancelled) return;
+        setAsset(a);
+        setPhase("starting");
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setError(unreachable(e));
+        setPhase("booked");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, setAsset, setPhase]);
+
   // Phase "starting": POST /experiments, then POST /experiments/{id}/start.
   useEffect(() => {
     if (phase !== "starting" || !booking) return;
     let cancelled = false;
-    const request = EXPERIMENT_REQUEST(booking.id);
+    const request = EXPERIMENT_REQUEST(booking.id, asset ? [asset.id] : []);
     tracked({ method: "POST", path: "/experiments", request }, 201, () => api.createExperiment(request))
       .then((created) =>
         tracked({ method: "POST", path: `/experiments/${created.id}/start` }, 202, () =>
@@ -79,7 +105,7 @@ export function Request() {
     return () => {
       cancelled = true;
     };
-  }, [phase, booking, setExperiment, setPhase]);
+  }, [phase, booking, asset, setExperiment, setPhase]);
 
   const onTyped = useCallback(() => {
     setRequestText(USER_REQUEST);
@@ -93,7 +119,7 @@ export function Request() {
 
   const onStart = useCallback(() => {
     setError(null);
-    setPhase("starting");
+    setPhase("uploading");
   }, [setPhase]);
 
   const assistantVisible = !["idle", "typing", "sent"].includes(phase);
@@ -108,7 +134,7 @@ export function Request() {
           booking={booking}
           experiment={experiment}
           bookingPending={phase === "booking"}
-          startPending={phase === "starting"}
+          startPending={phase === "uploading" || phase === "starting"}
           onTyped={onTyped}
           onBook={onBook}
           onStart={onStart}

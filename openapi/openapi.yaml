@@ -1,16 +1,16 @@
 openapi: 3.1.0
 info:
   title: VITEIA TaaS API
-  version: 0.4.0
+  version: 0.5.0
   summary: Unified API for discovering, booking and running experiments on federated Virtual Worlds testbeds.
   description: |
     Draft specification prepared by Lasting Dynamics as the seed of task T3.3
     (VW TaaS APIs and interoperability requirements, deliverable D3.3).
 
     The API is organised by resource category. Tranche 1 specified `testbeds`,
-    tranche 2 `bookings`, tranche 3 `experiments`, tranche 4 (this version)
-    `telemetry` and `results`. The other categories are declared as tags and
-    will be specified in the next tranches, in this order: assets, identity.
+    tranche 2 `bookings`, tranche 3 `experiments`, tranche 4 `telemetry` and
+    `results`, tranche 5 (this version) `assets`. `identity` is declared as a
+    tag and will be specified in tranche 6.
 
     All data in the examples is fictional demo data for the kick-off video.
     It does not describe any real partner facility.
@@ -43,7 +43,11 @@ tags:
   - name: results
     description: Aggregated metrics, event list and report of an experiment once it is stopped or completed.
   - name: assets
-    description: Upload, versioning and access control of 3D assets in glTF 2.0. (Tranche 5)
+    description: |
+      The 3D content a user brings to the federation: scenes and models in
+      glTF 2.0 (`.glb` or `.gltf`), so that every engine of every testbed can
+      load them. An asset has versions and a visibility that decides which
+      testbeds may read it. An experiment references assets by id in its scenario.
   - name: identity
     description: Authentication and authorisation, aligned with the security framework of T2.4. (Tranche 6)
 
@@ -498,6 +502,128 @@ paths:
                 title: Results are not available while the experiment runs
                 status: 409
 
+  /assets:
+    post:
+      tags: [assets]
+      operationId: uploadAsset
+      summary: Upload a 3D asset
+      description: |
+        Multipart upload of one glTF 2.0 file with its metadata. The federation
+        validates the file (glTF 2.0, size limit, no external references),
+        stores it and answers `201` with status `processing`; the status becomes
+        `ready` once the file is validated and converted for every engine.
+        Uploading a file with the `name` of an existing asset of the same
+        organisation creates a new version of that asset.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssetUpload'
+            encoding:
+              file:
+                contentType: model/gltf-binary, model/gltf+json
+      responses:
+        '201':
+          description: The asset, in status `processing`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+              examples:
+                tunnelEntrance:
+                  $ref: '#/components/examples/AssetTunnelEntrance'
+        '413':
+          description: The file exceeds the size limit.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.viteia.example/problems/asset-too-large
+                title: Asset exceeds the size limit
+                status: 413
+                detail: Limit is 500 MB per file.
+        '422':
+          description: The file is not valid glTF 2.0.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.viteia.example/problems/asset-invalid
+                title: File is not valid glTF 2.0
+                status: 422
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /assets/{assetId}:
+    get:
+      tags: [assets]
+      operationId: getAsset
+      summary: Get one asset
+      description: Metadata and status of the latest version of an asset.
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: The asset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+              examples:
+                tunnelEntrance:
+                  $ref: '#/components/examples/AssetTunnelEntranceReady'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [assets]
+      operationId: deleteAsset
+      summary: Delete an asset and all its versions
+      description: Refused while an experiment that references the asset is running.
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '204':
+          description: Deleted.
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: A running experiment references the asset.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.viteia.example/problems/asset-in-use
+                title: Asset is referenced by a running experiment
+                status: 409
+
+  /assets/{assetId}/versions:
+    get:
+      tags: [assets]
+      operationId: listAssetVersions
+      summary: List the versions of an asset
+      description: Newest first. An experiment records which version it used, so a test run in March can say it ran on version 3.
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: The versions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetVersionList'
+              example:
+                assetId: as-tunnel-entrance
+                items:
+                  - { version: 3, sizeBytes: 1843200, status: ready, createdAt: '2027-02-02T16:40:00Z' }
+                  - { version: 2, sizeBytes: 1790000, status: ready, createdAt: '2027-01-26T10:05:00Z' }
+                  - { version: 1, sizeBytes: 1650000, status: ready, createdAt: '2027-01-19T09:30:00Z' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   parameters:
     TestbedId:
@@ -524,6 +650,14 @@ components:
         type: string
         pattern: '^ex-[a-z0-9-]+$'
         example: ex-2027-0391
+    AssetId:
+      name: assetId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^as-[a-z0-9-]+$'
+        example: as-tunnel-entrance
 
   responses:
     NotFound:
@@ -1044,6 +1178,90 @@ components:
           type: string
           description: Downloadable report (format defined later).
 
+    AssetVisibility:
+      type: string
+      description: |
+        Who may read the file. `private`: only the owning organisation.
+        `booking`: the testbeds of the bookings the asset is used in, for the
+        duration of the booking. `federation`: every testbed of the federation.
+      enum: [private, booking, federation]
+
+    AssetStatus:
+      type: string
+      enum: [processing, ready, rejected]
+
+    AssetUpload:
+      type: object
+      required: [file, name]
+      properties:
+        file:
+          type: string
+          format: binary
+          description: glTF 2.0 file, `.glb` or `.gltf` without external references.
+        name:
+          type: string
+          maxLength: 120
+          description: Stable name of the asset; a new upload with the same name creates a new version.
+        visibility:
+          $ref: '#/components/schemas/AssetVisibility'
+        description:
+          type: string
+          maxLength: 500
+
+    Asset:
+      type: object
+      required: [id, name, format, version, status, visibility, sizeBytes, createdAt]
+      properties:
+        id:
+          type: string
+          pattern: '^as-[a-z0-9-]+$'
+        name:
+          type: string
+        description:
+          type: string
+        format:
+          type: string
+          enum: [model/gltf-binary, model/gltf+json]
+        version:
+          type: integer
+          minimum: 1
+        status:
+          $ref: '#/components/schemas/AssetStatus'
+        visibility:
+          $ref: '#/components/schemas/AssetVisibility'
+        sizeBytes:
+          type: integer
+        ownerOrganisation:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    AssetVersion:
+      type: object
+      required: [version, sizeBytes, status, createdAt]
+      properties:
+        version:
+          type: integer
+        sizeBytes:
+          type: integer
+        status:
+          $ref: '#/components/schemas/AssetStatus'
+        createdAt:
+          type: string
+          format: date-time
+
+    AssetVersionList:
+      type: object
+      required: [assetId, items]
+      properties:
+        assetId:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetVersion'
+
     Problem:
       type: object
       description: Error body, RFC 9457.
@@ -1110,7 +1328,7 @@ components:
         name: Tunnel inspection with quadruped robot
         scenario:
           name: highway-site-tunnel-inspection
-          assetIds: []
+          assetIds: [as-tunnel-entrance]
           parameters: { durationMinutes: 90, inspectionRoute: tunnel-north, alertZones: [red-zone-1, red-zone-2] }
         steps:
           - { order: 1, testbedId: tb-sofia-robotics, role: run-twin, description: Run the site digital twin and the robot }
@@ -1124,7 +1342,7 @@ components:
         testbedIds: [tb-sofia-robotics, tb-oulu-5g-xr]
         scenario:
           name: highway-site-tunnel-inspection
-          assetIds: []
+          assetIds: [as-tunnel-entrance]
           parameters: { durationMinutes: 90, inspectionRoute: tunnel-north, alertZones: [red-zone-1, red-zone-2] }
         steps:
           - { order: 1, testbedId: tb-sofia-robotics, role: run-twin, description: Run the site digital twin and the robot }
@@ -1142,7 +1360,7 @@ components:
         testbedIds: [tb-sofia-robotics, tb-oulu-5g-xr]
         scenario:
           name: highway-site-tunnel-inspection
-          assetIds: []
+          assetIds: [as-tunnel-entrance]
           parameters: { durationMinutes: 90, inspectionRoute: tunnel-north, alertZones: [red-zone-1, red-zone-2] }
         steps:
           - { order: 1, testbedId: tb-sofia-robotics, role: run-twin, description: Run the site digital twin and the robot }
@@ -1160,7 +1378,7 @@ components:
         testbedIds: [tb-sofia-robotics, tb-oulu-5g-xr]
         scenario:
           name: highway-site-tunnel-inspection
-          assetIds: []
+          assetIds: [as-tunnel-entrance]
           parameters: { durationMinutes: 90, inspectionRoute: tunnel-north, alertZones: [red-zone-1, red-zone-2] }
         steps:
           - { order: 1, testbedId: tb-sofia-robotics, role: run-twin, description: Run the site digital twin and the robot }
@@ -1380,6 +1598,30 @@ components:
         - {t: 26, testbedId: tb-sofia-robotics, type: zone-cleared, severity: info, message: 'Red zone 1 clear, robot resumes'}
         qosMet: true
         reportUrl: /experiments/ex-2027-0391/results/report
+    AssetTunnelEntrance:
+      value:
+        id: as-tunnel-entrance
+        name: tunnel_entrance_v3
+        description: Highway tunnel north entrance, as built, week 5
+        format: model/gltf-binary
+        version: 3
+        status: processing
+        visibility: booking
+        sizeBytes: 1843200
+        ownerOrganisation: Demo construction company
+        createdAt: '2027-02-02T16:40:00Z'
+    AssetTunnelEntranceReady:
+      value:
+        id: as-tunnel-entrance
+        name: tunnel_entrance_v3
+        description: Highway tunnel north entrance, as built, week 5
+        format: model/gltf-binary
+        version: 3
+        status: ready
+        visibility: booking
+        sizeBytes: 1843200
+        ownerOrganisation: Demo construction company
+        createdAt: '2027-02-02T16:40:00Z'
     Catalogue:
       value:
         total: 10

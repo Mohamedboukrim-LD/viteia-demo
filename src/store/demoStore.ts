@@ -1,10 +1,10 @@
 import { create } from "zustand";
 import { useApiLog } from "../api/log";
-import type { Booking, BookingRequest, Domain, Experiment, Testbed, TelemetryBatch } from "../api/client";
+import type { Asset, Booking, BookingRequest, Domain, Experiment, Testbed, TelemetryBatch } from "../api/client";
 
 export type Theme = "default" | "contrast";
 
-export type RequestPhase = "idle" | "typing" | "sent" | "proposed" | "booking" | "booked" | "starting" | "started";
+export type RequestPhase = "idle" | "typing" | "sent" | "proposed" | "booking" | "booked" | "uploading" | "starting" | "started";
 export type TwinPhase = "running" | "event" | "stopping" | "stopped";
 
 type DemoState = {
@@ -26,6 +26,8 @@ type DemoState = {
   setProposal: (p: BookingRequest | null) => void;
   booking: Booking | null;
   setBooking: (b: Booking | null) => void;
+  asset: Asset | null;
+  setAsset: (a: Asset | null) => void;
   // Experiment (scene 2 end, scene 3)
   experiment: Experiment | null;
   setExperiment: (e: Experiment | null) => void;
@@ -48,6 +50,7 @@ const initial = {
   requestText: "",
   proposal: null as BookingRequest | null,
   booking: null as Booking | null,
+  asset: null as Asset | null,
   experiment: null as Experiment | null,
   twinPhase: "running" as TwinPhase,
   telemetry: null as TelemetryBatch | null,
@@ -69,6 +72,7 @@ export const useDemoStore = create<DemoState>((set) => ({
   setRequestText: (requestText) => set({ requestText }),
   setProposal: (proposal) => set({ proposal }),
   setBooking: (booking) => set({ booking }),
+  setAsset: (asset) => set({ asset }),
   setExperiment: (experiment) => set({ experiment }),
   setTwinPhase: (twinPhase) => set({ twinPhase }),
   setTelemetry: (telemetry) => set({ telemetry }),
