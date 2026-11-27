@@ -1,0 +1,89 @@
+@import "./styles/tokens.css";
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  font-family: var(--font);
+  font-size: var(--text-m);
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+button, input, select { font: inherit; color: inherit; }
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+a { color: var(--action); }
+
+/* App frame: a fixed-size stage so every recording looks the same */
+.stage {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.topbar__brand {
+  font-size: var(--text-l);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.topbar__scene {
+  color: var(--ink-soft);
+  font-size: var(--text-s);
+}
+
+.scene {
+  min-height: 0;
+  padding: var(--space-6);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.btn--primary {
+  background: var(--action);
+  color: var(--action-ink);
+  border-color: var(--action);
+}
+
+.btn[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+/* Placeholder for scenes not built yet */
+.placeholder {
+  display: grid;
+  place-content: center;
+  height: 100%;
+  color: var(--ink-soft);
+  text-align: center;
+}

@@ -1,0 +1,42 @@
+.map {
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.map__land {
+  fill: var(--map-land);
+  stroke: var(--map-border);
+  stroke-width: 0.6;
+  outline: none;
+}
+
+.map__marker { cursor: pointer; }
+
+.map__marker circle {
+  fill: var(--action);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.map__marker text {
+  font-size: 13px;
+  font-weight: 600;
+  fill: var(--ink);
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  pointer-events: none;
+}
+
+.map__marker--off circle { fill: var(--ink-soft); }
+
+.map__marker--active circle { fill: var(--signal); }
+
+.map__marker:focus-visible { outline: none; }
+.map__marker:focus-visible circle {
+  stroke: var(--focus);
+  stroke-width: 4;
+}

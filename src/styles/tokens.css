@@ -1,0 +1,60 @@
+/* Temporary design tokens. Nastya owns the final design: change values here,
+   not in components. Components only use these variables. */
+
+:root {
+  color-scheme: light;
+
+  /* Palette: cool paper, slate ink, one deep teal for actions, one signal red for alarms */
+  --paper: #f2f4f6;
+  --surface: #ffffff;
+  --ink: #1f2933;
+  --ink-soft: #52606d;
+  --line: #d3dae1;
+  --map-land: #dfe5ea;
+  --map-border: #ffffff;
+  --action: #0f6a7a;
+  --action-ink: #ffffff;
+  --signal: #c8323e;
+  --ok: #2f7d4f;
+  --focus: #e0a100;
+
+  --font: "Source Sans 3", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --text-s: 0.875rem;
+  --text-m: 1rem;
+  --text-l: 1.25rem;
+  --text-xl: 1.75rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  --radius: 6px;
+}
+
+/* High-contrast theme, toggled from the catalogue scene */
+:root[data-theme="contrast"] {
+  --paper: #000000;
+  --surface: #0a0a0a;
+  --ink: #ffffff;
+  --ink-soft: #e6e6e6;
+  --line: #ffffff;
+  --map-land: #2b2b2b;
+  --map-border: #000000;
+  --action: #ffd500;
+  --action-ink: #000000;
+  --signal: #ff5a5a;
+  --ok: #4ce08a;
+  --focus: #00e5ff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

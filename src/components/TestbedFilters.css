@@ -1,0 +1,44 @@
+.filters {
+  display: grid;
+  gap: var(--space-6);
+  align-content: start;
+}
+
+.filters__group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-4);
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.filters__group legend {
+  font-weight: 600;
+  padding: 0 var(--space-1);
+}
+
+.filters__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  cursor: pointer;
+}
+
+.filters__option input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--action);
+}
+
+.filters__clear {
+  justify-self: start;
+  margin-top: var(--space-2);
+}
+
+.filters__clear:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

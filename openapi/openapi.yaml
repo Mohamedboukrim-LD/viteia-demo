@@ -1,0 +1,455 @@
+openapi: 3.1.0
+info:
+  title: VITEIA TaaS API
+  version: 0.1.0
+  summary: Unified API for discovering, booking and running experiments on federated Virtual Worlds testbeds.
+  description: |
+    Draft specification prepared by Lasting Dynamics as the seed of task T3.3
+    (VW TaaS APIs and interoperability requirements, deliverable D3.3).
+
+    The API is organised by resource category. Tranche 1 (this version) specifies
+    the `testbeds` category. The other categories are declared as tags and will be
+    specified in the next tranches, in this order: bookings, experiments,
+    telemetry, results, assets, identity.
+
+    All data in the examples is fictional demo data for the kick-off video.
+    It does not describe any real partner facility.
+  contact:
+    name: Lasting Dynamics SL
+servers:
+  - url: http://localhost:4010
+    description: Local mock server (Prism). Prism matches raw paths, so the version prefix is omitted here.
+  - url: https://api.viteia.example/v1
+    description: Placeholder for the future gateway
+
+tags:
+  - name: testbeds
+    description: Catalogue of federated testbeds, their location, status and capabilities.
+  - name: bookings
+    description: Reservation of testbed resources for a time window, with declared QoS requirements. (Tranche 2)
+  - name: experiments
+    description: Creation, start, stimulation and stop of experiments, including multi-testbed workflows. (Tranche 3)
+  - name: telemetry
+    description: Real-time data streams from running experiments. (Tranche 4)
+  - name: results
+    description: Reports and metrics of completed experiments. (Tranche 4)
+  - name: assets
+    description: Upload, versioning and access control of 3D assets in glTF 2.0. (Tranche 5)
+  - name: identity
+    description: Authentication and authorisation, aligned with the security framework of T2.4. (Tranche 6)
+
+paths:
+  /testbeds:
+    get:
+      tags: [testbeds]
+      operationId: listTestbeds
+      summary: List the testbeds of the federation
+      description: |
+        Returns the catalogue. Filters are combined with AND. The mock server
+        ignores filters and always returns the full catalogue; the demo client
+        filters on its side.
+      parameters:
+        - name: domain
+          in: query
+          description: Keep only testbeds offering at least one of these domains.
+          required: false
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/Domain'
+          style: form
+          explode: false
+        - name: country
+          in: query
+          description: ISO 3166-1 alpha-2 country code.
+          required: false
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 2
+            example: BG
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/TestbedStatus'
+      responses:
+        '200':
+          description: The catalogue.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestbedList'
+              examples:
+                catalogue:
+                  $ref: '#/components/examples/Catalogue'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /testbeds/{testbedId}:
+    get:
+      tags: [testbeds]
+      operationId: getTestbed
+      summary: Get one testbed
+      parameters:
+        - $ref: '#/components/parameters/TestbedId'
+      responses:
+        '200':
+          description: The testbed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Testbed'
+              examples:
+                sofiaRobotics:
+                  $ref: '#/components/examples/SofiaRobotics'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /testbeds/{testbedId}/capabilities:
+    get:
+      tags: [testbeds]
+      operationId: listTestbedCapabilities
+      summary: List the capabilities of a testbed
+      description: |
+        Detailed, machine-readable capabilities: hardware, engines and the QoS
+        the testbed can guarantee. A booking request (tranche 2) is validated
+        against this list.
+      parameters:
+        - $ref: '#/components/parameters/TestbedId'
+      responses:
+        '200':
+          description: The capabilities.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilityList'
+              examples:
+                sofiaRobotics:
+                  value:
+                    testbedId: tb-sofia-robotics
+                    items:
+                      - id: cap-quadruped-01
+                        kind: robot
+                        name: Quadruped inspection robot
+                        quantity: 2
+                        engines: []
+                        qos:
+                          maxLatencyMs: 30
+                          minFrameRate: null
+                      - id: cap-dt-engine
+                        kind: digital_twin_platform
+                        name: Site digital twin runtime
+                        quantity: 1
+                        engines: [unity]
+                        qos:
+                          maxLatencyMs: 50
+                          minFrameRate: 60
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    TestbedId:
+      name: testbedId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^tb-[a-z0-9-]+$'
+        example: tb-sofia-robotics
+
+  responses:
+    NotFound:
+      description: The resource does not exist.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: https://api.viteia.example/problems/not-found
+            title: Testbed not found
+            status: 404
+    Unauthorized:
+      description: Missing or invalid credentials.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: https://api.viteia.example/problems/unauthorized
+            title: Authentication required
+            status: 401
+
+  schemas:
+    Domain:
+      type: string
+      description: Family of capabilities a testbed offers.
+      enum: [digital_twin, xr, robotics, 5g, hpc, iot, simulation]
+
+    TestbedStatus:
+      type: string
+      enum: [online, maintenance, offline]
+
+    Engine:
+      type: string
+      description: Virtual World engines supported. `custom` covers proprietary engines described in the capability name.
+      enum: [unity, unreal, godot, custom]
+
+    Location:
+      type: object
+      required: [city, country, lat, lon]
+      properties:
+        city:
+          type: string
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2.
+          minLength: 2
+          maxLength: 2
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        lon:
+          type: number
+          minimum: -180
+          maximum: 180
+
+    QoSProfile:
+      type: object
+      description: Guarantees the testbed can offer. `null` means not applicable.
+      properties:
+        maxLatencyMs:
+          type: [integer, 'null']
+          minimum: 0
+          description: Upper bound of end-to-end latency the testbed guarantees.
+        minFrameRate:
+          type: [integer, 'null']
+          minimum: 0
+          description: Minimum frame rate guaranteed for immersive applications.
+
+    Testbed:
+      type: object
+      required: [id, name, operator, location, domains, status, engines, qos]
+      properties:
+        id:
+          type: string
+          pattern: '^tb-[a-z0-9-]+$'
+        name:
+          type: string
+        operator:
+          type: string
+          description: Organisation operating the testbed.
+        description:
+          type: string
+        location:
+          $ref: '#/components/schemas/Location'
+        domains:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/Domain'
+        status:
+          $ref: '#/components/schemas/TestbedStatus'
+        engines:
+          type: array
+          items:
+            $ref: '#/components/schemas/Engine'
+        qos:
+          $ref: '#/components/schemas/QoSProfile'
+        conformance:
+          type: object
+          description: Result of the latest VITEIA conformance test suite run.
+          properties:
+            passed:
+              type: integer
+            total:
+              type: integer
+            runAt:
+              type: string
+              format: date-time
+
+    TestbedList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Testbed'
+        total:
+          type: integer
+
+    Capability:
+      type: object
+      required: [id, kind, name, quantity]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [xr_headset, robot, network_5g, digital_twin_platform, hpc_node, sensor_array, simulator]
+        name:
+          type: string
+        quantity:
+          type: integer
+          minimum: 0
+          description: Units available for booking.
+        engines:
+          type: array
+          items:
+            $ref: '#/components/schemas/Engine'
+        qos:
+          $ref: '#/components/schemas/QoSProfile'
+
+    CapabilityList:
+      type: object
+      required: [testbedId, items]
+      properties:
+        testbedId:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+
+    Problem:
+      type: object
+      description: Error body, RFC 9457.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Defined in the identity tranche. Not enforced by the mock.
+
+  examples:
+    SofiaRobotics:
+      value:
+        id: tb-sofia-robotics
+        name: Sofia Robotics Lab
+        operator: Demo operator A
+        description: Legged and wheeled robots with an indoor construction mock-up and a site digital twin runtime.
+        location: { city: Sofia, country: BG, lat: 42.6977, lon: 23.3219 }
+        domains: [robotics, digital_twin, iot]
+        status: online
+        engines: [unity]
+        qos: { maxLatencyMs: 30, minFrameRate: 60 }
+        conformance: { passed: 112, total: 112, runAt: '2027-01-10T09:00:00Z' }
+    Catalogue:
+      value:
+        total: 10
+        items:
+          - id: tb-sofia-robotics
+            name: Sofia Robotics Lab
+            operator: Demo operator A
+            description: Legged and wheeled robots with an indoor construction mock-up and a site digital twin runtime.
+            location: { city: Sofia, country: BG, lat: 42.6977, lon: 23.3219 }
+            domains: [robotics, digital_twin, iot]
+            status: online
+            engines: [unity]
+            qos: { maxLatencyMs: 30, minFrameRate: 60 }
+            conformance: { passed: 112, total: 112, runAt: '2027-01-10T09:00:00Z' }
+          - id: tb-oulu-5g-xr
+            name: Oulu 5G/XR Lab
+            operator: Demo operator B
+            description: Private 5G network with edge rendering and a fleet of OpenXR headsets.
+            location: { city: Oulu, country: FI, lat: 65.0121, lon: 25.4651 }
+            domains: [5g, xr]
+            status: online
+            engines: [unity, unreal]
+            qos: { maxLatencyMs: 20, minFrameRate: 90 }
+            conformance: { passed: 112, total: 112, runAt: '2027-01-08T14:30:00Z' }
+          - id: tb-athens-xr
+            name: Athens Immersive Lab
+            operator: Demo operator C
+            description: Multi-user VR and AR space with motion capture.
+            location: { city: Athens, country: GR, lat: 37.9838, lon: 23.7275 }
+            domains: [xr, simulation]
+            status: online
+            engines: [unity, godot]
+            qos: { maxLatencyMs: 25, minFrameRate: 90 }
+            conformance: { passed: 110, total: 112, runAt: '2027-01-05T10:00:00Z' }
+          - id: tb-stuttgart-vr
+            name: Stuttgart Industrial VR Centre
+            operator: Demo operator D
+            description: CAVE and powerwall for industrial design review.
+            location: { city: Stuttgart, country: DE, lat: 48.7758, lon: 9.1829 }
+            domains: [xr, digital_twin]
+            status: online
+            engines: [unreal, custom]
+            qos: { maxLatencyMs: 20, minFrameRate: 120 }
+            conformance: { passed: 112, total: 112, runAt: '2027-01-12T08:15:00Z' }
+          - id: tb-limerick-hpc
+            name: Limerick HPC Node
+            operator: Demo operator E
+            description: GPU cluster for simulation and model training.
+            location: { city: Limerick, country: IE, lat: 52.6638, lon: -8.6267 }
+            domains: [hpc, simulation]
+            status: online
+            engines: []
+            qos: { maxLatencyMs: null, minFrameRate: null }
+            conformance: { passed: 112, total: 112, runAt: '2027-01-03T16:00:00Z' }
+          - id: tb-lisbon-iot
+            name: Lisbon IoT Field Lab
+            operator: Demo operator F
+            description: Outdoor sensor network with LiDAR and environmental sensors.
+            location: { city: Lisbon, country: PT, lat: 38.7223, lon: -9.1393 }
+            domains: [iot, digital_twin]
+            status: maintenance
+            engines: [custom]
+            qos: { maxLatencyMs: 80, minFrameRate: null }
+            conformance: { passed: 104, total: 112, runAt: '2026-12-20T11:00:00Z' }
+          - id: tb-milan-factory
+            name: Milan Factory Twin
+            operator: Demo operator G
+            description: Digital twin of a pilot production line with real PLC data.
+            location: { city: Milan, country: IT, lat: 45.4642, lon: 9.19 }
+            domains: [digital_twin, iot, simulation]
+            status: online
+            engines: [unity]
+            qos: { maxLatencyMs: 50, minFrameRate: 60 }
+            conformance: { passed: 112, total: 112, runAt: '2027-01-09T09:45:00Z' }
+          - id: tb-naples-robotics
+            name: Naples Field Robotics Lab
+            operator: Demo operator H
+            description: Outdoor arena for legged robots and drones.
+            location: { city: Naples, country: IT, lat: 40.8518, lon: 14.2681 }
+            domains: [robotics, iot]
+            status: online
+            engines: []
+            qos: { maxLatencyMs: 40, minFrameRate: null }
+            conformance: { passed: 112, total: 112, runAt: '2027-01-11T13:20:00Z' }
+          - id: tb-nicosia-xr
+            name: Nicosia XR Studio
+            operator: Demo operator I
+            description: Volumetric capture and social VR testing.
+            location: { city: Nicosia, country: CY, lat: 35.1856, lon: 33.3823 }
+            domains: [xr]
+            status: online
+            engines: [unity, unreal]
+            qos: { maxLatencyMs: 30, minFrameRate: 90 }
+            conformance: { passed: 112, total: 112, runAt: '2027-01-07T15:10:00Z' }
+          - id: tb-berlin-5g
+            name: Berlin 5G Edge Lab
+            operator: Demo operator J
+            description: 5G edge computing with network slicing for XR streaming.
+            location: { city: Berlin, country: DE, lat: 52.52, lon: 13.405 }
+            domains: [5g, hpc]
+            status: online
+            engines: []
+            qos: { maxLatencyMs: 15, minFrameRate: null }
+            conformance: { passed: 112, total: 112, runAt: '2027-01-06T12:00:00Z' }
