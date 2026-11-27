@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Booking, BookingRequest } from "../api/client";
+import type { Booking, BookingRequest, Experiment } from "../api/client";
 import { CAPABILITY_LABEL } from "../data/proposal";
 import { useDemoStore } from "../store/demoStore";
 import "./AssistantChat.css";
@@ -9,9 +9,12 @@ type Props = {
   assistantReply: string | null;
   proposal: BookingRequest | null;
   booking: Booking | null;
+  experiment: Experiment | null;
   bookingPending: boolean;
+  startPending: boolean;
   onTyped: () => void;
   onBook: () => void;
+  onStart: () => void;
 };
 
 /* Types a text one character at a time, so the recording shows the
@@ -40,7 +43,18 @@ function formatWindow(w: BookingRequest["window"]) {
   return `${day}, ${time(start)}–${time(end)} UTC`;
 }
 
-export function AssistantChat({ userText, assistantReply, proposal, booking, bookingPending, onTyped, onBook }: Props) {
+export function AssistantChat({
+  userText,
+  assistantReply,
+  proposal,
+  booking,
+  experiment,
+  bookingPending,
+  startPending,
+  onTyped,
+  onBook,
+  onStart,
+}: Props) {
   const phase = useDemoStore((s) => s.requestPhase);
   const testbeds = useDemoStore((s) => s.testbeds);
   const typedUser = useTyped(phase === "typing" ? userText : "");
@@ -88,12 +102,19 @@ export function AssistantChat({ userText, assistantReply, proposal, booking, boo
               </div>
             ))}
             <div className="chat__actions">
-              {booking ? (
-                <span className="chat__confirmed">Booking {booking.id}: {booking.status}</span>
-              ) : (
+              {!booking && (
                 <button type="button" className="btn btn--primary" onClick={onBook} disabled={bookingPending}>
                   {bookingPending ? "Booking…" : "Book these resources"}
                 </button>
+              )}
+              {booking && <span className="chat__confirmed">Booking {booking.id}: {booking.status}</span>}
+              {booking && !experiment && (
+                <button type="button" className="btn btn--primary" onClick={onStart} disabled={startPending}>
+                  {startPending ? (phase === "uploading" ? "Uploading the site model…" : "Starting…") : "Start the experiment"}
+                </button>
+              )}
+              {experiment && (
+                <span className="chat__confirmed">Experiment {experiment.id}: {experiment.status}</span>
               )}
             </div>
           </div>

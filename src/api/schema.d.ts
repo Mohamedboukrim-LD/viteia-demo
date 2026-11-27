@@ -116,6 +116,231 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/experiments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create an experiment inside a confirmed booking
+         * @description Validates that the booking is confirmed and that every step references a
+         *     testbed of that booking. The experiment is created in status `created`;
+         *     it does not run until `start` is called.
+         */
+        post: operations["createExperiment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/experiments/{experimentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one experiment
+         * @description Current status and timestamps of an experiment.
+         */
+        get: operations["getExperiment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/experiments/{experimentId}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start an experiment
+         * @description Asks every testbed in the workflow to start its step. Returns as soon as
+         *     the federation has accepted the request; the status moves to `running`
+         *     when all testbeds confirm, and progress arrives on the telemetry stream
+         *     (tranche 4).
+         */
+        post: operations["startExperiment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/experiments/{experimentId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inject an event into a running experiment
+         * @description A stimulus the user sends to the scenario while it runs: an obstacle in
+         *     front of the robot, a network degradation, a sensor failure. The testbed
+         *     named in `testbedId` applies it; without `testbedId` the federation
+         *     routes it to every testbed in the workflow.
+         */
+        post: operations["injectEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/experiments/{experimentId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop an experiment
+         * @description Stops every step and releases the testbeds. Results (tranche 4) become available once the status is `stopped` or `completed`.
+         */
+        post: operations["stopExperiment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/experiments/{experimentId}/telemetry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the telemetry of an experiment
+         * @description Two ways to read it. With `Accept: text/event-stream` the federation
+         *     keeps the connection open and pushes one `sample` event per
+         *     TelemetrySample as the testbeds produce them. With `Accept:
+         *     application/json` it returns the samples recorded since `since`
+         *     (seconds from the start of the experiment), in one batch. The portal
+         *     uses the stream while the experiment runs and the batch to replay it.
+         *     The mock serves the batch only.
+         */
+        get: operations["getTelemetry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/experiments/{experimentId}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the results of an experiment
+         * @description Available once the experiment is `stopped` or `completed`. Aggregates
+         *     the telemetry per testbed and overall, lists the events detected and
+         *     says whether the QoS requested in the booking was met.
+         */
+        get: operations["getResults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload a 3D asset
+         * @description Multipart upload of one glTF 2.0 file with its metadata. The federation
+         *     validates the file (glTF 2.0, size limit, no external references),
+         *     stores it and answers `201` with status `processing`; the status becomes
+         *     `ready` once the file is validated and converted for every engine.
+         *     Uploading a file with the `name` of an existing asset of the same
+         *     organisation creates a new version of that asset.
+         */
+        post: operations["uploadAsset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets/{assetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one asset
+         * @description Metadata and status of the latest version of an asset.
+         */
+        get: operations["getAsset"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an asset and all its versions
+         * @description Refused while an experiment that references the asset is running.
+         */
+        delete: operations["deleteAsset"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assets/{assetId}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the versions of an asset
+         * @description Newest first. An experiment records which version it used, so a test run in March can say it ran on version 3.
+         */
+        get: operations["listAssetVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -235,6 +460,173 @@ export interface components {
         BookingProblem: components["schemas"]["Problem"] & {
             violations?: components["schemas"]["QoSViolation"][];
         };
+        /** @enum {string} */
+        ExperimentStatus: "created" | "starting" | "running" | "paused" | "completed" | "stopped" | "failed";
+        /** @description One stage of a multi-testbed workflow. */
+        WorkflowStep: {
+            order: number;
+            testbedId: string;
+            /** @description What this testbed does in the experiment, e.g. `run-twin`, `operate-robot`, `stream-xr`. */
+            role: string;
+            description?: string;
+        };
+        Scenario: {
+            name: string;
+            /** @description 3D assets uploaded through the assets category (tranche 5). */
+            assetIds?: string[];
+            /** @description Free-form scenario parameters, interpreted by the testbeds. */
+            parameters?: {
+                [key: string]: unknown;
+            };
+        };
+        ExperimentRequest: {
+            bookingId: string;
+            name: string;
+            scenario: components["schemas"]["Scenario"];
+            steps: components["schemas"]["WorkflowStep"][];
+        };
+        Experiment: {
+            id: string;
+            bookingId: string;
+            name: string;
+            status: components["schemas"]["ExperimentStatus"];
+            testbedIds: string[];
+            scenario?: components["schemas"]["Scenario"];
+            steps: components["schemas"]["WorkflowStep"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            startedAt?: string | null;
+            /** Format: date-time */
+            stoppedAt?: string | null;
+            /** @description Path of the telemetry stream while running (tranche 4). */
+            telemetryStream?: string | null;
+        };
+        ExperimentEvent: {
+            /** @description Event type agreed in the scenario, e.g. `obstacle`, `network-degradation`, `sensor-failure`. */
+            type: string;
+            testbedId?: string;
+            payload?: {
+                [key: string]: unknown;
+            };
+        };
+        EventAck: {
+            eventId: string;
+            experimentId: string;
+            /** Format: date-time */
+            acceptedAt: string;
+        };
+        /** @description Something a testbed detected, as opposed to an event injected by the user. */
+        TelemetryEvent: {
+            /** @description e.g. `zone-violation`, `zone-cleared`, `robot-stopped`, `anomaly`. */
+            type: string;
+            /** @enum {string} */
+            severity: "info" | "warning" | "alarm";
+            zoneId?: string;
+            /** @description Who or what the event is about, e.g. `worker-3`, `robot-1`. */
+            subject?: string;
+            message: string;
+        };
+        TelemetrySample: {
+            /** @description Seconds since the experiment started. */
+            t: number;
+            testbedId: string;
+            /** @description Metric names depend on the capability; common ones are listed. */
+            metrics: {
+                latencyMs?: number;
+                frameRate?: number;
+                bandwidthMbps?: number;
+                robotPosition?: {
+                    x?: number;
+                    y?: number;
+                    z?: number;
+                };
+                robotSpeedMs?: number;
+            } & {
+                [key: string]: unknown;
+            };
+            events?: components["schemas"]["TelemetryEvent"][];
+        };
+        TelemetryBatch: {
+            experimentId: string;
+            from: number;
+            to: number;
+            samples: components["schemas"]["TelemetrySample"][];
+        };
+        ResultMetrics: {
+            avgLatencyMs: number;
+            p95LatencyMs?: number;
+            availabilityPct: number;
+            avgFrameRate?: number | null;
+            eventsDetected: number;
+            samples: number;
+        };
+        TestbedResult: {
+            testbedId: string;
+            avgLatencyMs: number;
+            availabilityPct: number;
+            eventsDetected: number;
+        };
+        ExperimentResults: {
+            experimentId: string;
+            status: components["schemas"]["ExperimentStatus"];
+            window: components["schemas"]["TimeWindow"];
+            metrics: components["schemas"]["ResultMetrics"];
+            perTestbed: components["schemas"]["TestbedResult"][];
+            events: (components["schemas"]["TelemetryEvent"] & {
+                t: number;
+                testbedId: string;
+            })[];
+            /** @description Whether every testbed stayed within the QoS requested in the booking. */
+            qosMet: boolean;
+            /** @description Downloadable report (format defined later). */
+            reportUrl?: string;
+        };
+        /**
+         * @description Who may read the file. `private`: only the owning organisation.
+         *     `booking`: the testbeds of the bookings the asset is used in, for the
+         *     duration of the booking. `federation`: every testbed of the federation.
+         * @enum {string}
+         */
+        AssetVisibility: "private" | "booking" | "federation";
+        /** @enum {string} */
+        AssetStatus: "processing" | "ready" | "rejected";
+        AssetUpload: {
+            /**
+             * Format: binary
+             * @description glTF 2.0 file, `.glb` or `.gltf` without external references.
+             */
+            file: string;
+            /** @description Stable name of the asset; a new upload with the same name creates a new version. */
+            name: string;
+            visibility?: components["schemas"]["AssetVisibility"];
+            description?: string;
+        };
+        Asset: {
+            id: string;
+            name: string;
+            description?: string;
+            /** @enum {string} */
+            format: "model/gltf-binary" | "model/gltf+json";
+            version: number;
+            status: components["schemas"]["AssetStatus"];
+            visibility: components["schemas"]["AssetVisibility"];
+            sizeBytes: number;
+            ownerOrganisation?: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AssetVersion: {
+            version: number;
+            sizeBytes: number;
+            status: components["schemas"]["AssetStatus"];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AssetVersionList: {
+            assetId: string;
+            items: components["schemas"]["AssetVersion"][];
+        };
         /** @description Error body, RFC 9457. */
         Problem: {
             /** Format: uri */
@@ -281,6 +673,8 @@ export interface components {
     parameters: {
         TestbedId: string;
         BookingId: string;
+        ExperimentId: string;
+        AssetId: string;
     };
     requestBodies: never;
     headers: never;
@@ -469,6 +863,431 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    createExperiment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExperimentRequest"];
+            };
+        };
+        responses: {
+            /** @description The experiment, not yet started. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Experiment"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The booking is not confirmed, or its window is over. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://api.viteia.example/problems/booking-not-confirmed",
+                     *       "title": "Booking is not confirmed",
+                     *       "status": 409
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A step references a testbed outside the booking. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://api.viteia.example/problems/step-outside-booking",
+                     *       "title": "Step references a testbed not in the booking",
+                     *       "status": 422,
+                     *       "detail": "Step 2 references tb-berlin-5g, booking bk-2027-0142 covers tb-sofia-robotics and tb-oulu-5g-xr."
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getExperiment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experimentId: components["parameters"]["ExperimentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The experiment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Experiment"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    startExperiment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experimentId: components["parameters"]["ExperimentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Start accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Experiment"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description The experiment is not in status `created` or `paused`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://api.viteia.example/problems/invalid-transition",
+                     *       "title": "Experiment cannot be started from its current status",
+                     *       "status": 409
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    injectEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experimentId: components["parameters"]["ExperimentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExperimentEvent"];
+            };
+        };
+        responses: {
+            /** @description Event accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "eventId": "ev-0007",
+                     *       "experimentId": "ex-2027-0391",
+                     *       "acceptedAt": "2027-02-03T09:21:40Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["EventAck"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description The experiment is not running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://api.viteia.example/problems/not-running",
+                     *       "title": "Experiment is not running",
+                     *       "status": 409
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    stopExperiment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experimentId: components["parameters"]["ExperimentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stop accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Experiment"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getTelemetry: {
+        parameters: {
+            query?: {
+                /** @description Return samples with `t` greater than this value, in seconds from the start. */
+                since?: number;
+            };
+            header?: never;
+            path: {
+                experimentId: components["parameters"]["ExperimentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The samples. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelemetryBatch"];
+                    "text/event-stream": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experimentId: components["parameters"]["ExperimentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The results. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentResults"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description The experiment is still running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://api.viteia.example/problems/results-not-ready",
+                     *       "title": "Results are not available while the experiment runs",
+                     *       "status": 409
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    uploadAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["AssetUpload"];
+            };
+        };
+        responses: {
+            /** @description The asset, in status `processing`. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Asset"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The file exceeds the size limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://api.viteia.example/problems/asset-too-large",
+                     *       "title": "Asset exceeds the size limit",
+                     *       "status": 413,
+                     *       "detail": "Limit is 500 MB per file."
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The file is not valid glTF 2.0. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://api.viteia.example/problems/asset-invalid",
+                     *       "title": "File is not valid glTF 2.0",
+                     *       "status": 422
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The asset. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Asset"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            /** @description A running experiment references the asset. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://api.viteia.example/problems/asset-in-use",
+                     *       "title": "Asset is referenced by a running experiment",
+                     *       "status": 409
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listAssetVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The versions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "assetId": "as-tunnel-entrance",
+                     *       "items": [
+                     *         {
+                     *           "version": 3,
+                     *           "sizeBytes": 1843200,
+                     *           "status": "ready",
+                     *           "createdAt": "2027-02-02T16:40:00Z"
+                     *         },
+                     *         {
+                     *           "version": 2,
+                     *           "sizeBytes": 1790000,
+                     *           "status": "ready",
+                     *           "createdAt": "2027-01-26T10:05:00Z"
+                     *         },
+                     *         {
+                     *           "version": 1,
+                     *           "sizeBytes": 1650000,
+                     *           "status": "ready",
+                     *           "createdAt": "2027-01-19T09:30:00Z"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AssetVersionList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
 }
