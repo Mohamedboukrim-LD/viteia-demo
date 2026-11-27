@@ -1,6 +1,6 @@
 .api {
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
+  grid-template-rows: auto auto auto auto 1fr;
   gap: var(--space-3);
   min-height: 0;
   padding: var(--space-4);
@@ -70,3 +70,21 @@
   font-family: var(--font);
   color: var(--ink-soft);
 }
+
+.api__history {
+  display: grid;
+  gap: var(--space-1);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+
+.api__history .api__method { opacity: 0.6; }
+
+.api__status {
+  margin-left: auto;
+  color: var(--ok);
+  font-weight: 700;
+}
+
+.api__status--error { color: var(--signal); }

@@ -1,9 +1,11 @@
 import { create } from "zustand";
-import type { Booking, BookingRequest, Domain, Testbed } from "../api/client";
+import { useApiLog } from "../api/log";
+import type { Booking, BookingRequest, Domain, Experiment, Testbed } from "../api/client";
 
 export type Theme = "default" | "contrast";
 
-export type RequestPhase = "idle" | "typing" | "sent" | "proposed" | "booking" | "booked";
+export type RequestPhase = "idle" | "typing" | "sent" | "proposed" | "booking" | "booked" | "starting" | "started";
+export type TwinPhase = "running" | "event" | "stopping" | "stopped";
 
 type DemoState = {
   theme: Theme;
@@ -24,9 +26,11 @@ type DemoState = {
   setProposal: (p: BookingRequest | null) => void;
   booking: Booking | null;
   setBooking: (b: Booking | null) => void;
-  // Experiment scene (tranche 3)
-  experimentId: string | null;
-  setExperimentId: (id: string | null) => void;
+  // Experiment (scene 2 end, scene 3)
+  experiment: Experiment | null;
+  setExperiment: (e: Experiment | null) => void;
+  twinPhase: TwinPhase;
+  setTwinPhase: (phase: TwinPhase) => void;
 
   reset: () => void;
 };
@@ -39,7 +43,8 @@ const initial = {
   requestText: "",
   proposal: null as BookingRequest | null,
   booking: null as Booking | null,
-  experimentId: null as string | null,
+  experiment: null as Experiment | null,
+  twinPhase: "running" as TwinPhase,
 };
 
 export const useDemoStore = create<DemoState>((set) => ({
@@ -57,9 +62,13 @@ export const useDemoStore = create<DemoState>((set) => ({
   setRequestText: (requestText) => set({ requestText }),
   setProposal: (proposal) => set({ proposal }),
   setBooking: (booking) => set({ booking }),
-  setExperimentId: (experimentId) => set({ experimentId }),
+  setExperiment: (experiment) => set({ experiment }),
+  setTwinPhase: (twinPhase) => set({ twinPhase }),
   // Theme survives a reset on purpose: the recording starts in the chosen theme.
-  reset: () => set((s) => ({ ...initial, theme: s.theme })),
+  reset: () => {
+    useApiLog.getState().clear();
+    set((s) => ({ ...initial, theme: s.theme }));
+  },
 }));
 
 export function filterTestbeds(testbeds: Testbed[], activeDomains: Domain[]): Testbed[] {
