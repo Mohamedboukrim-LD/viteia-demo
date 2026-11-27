@@ -35,21 +35,15 @@ export function Results() {
 
   // GET /experiments/{id}/results on entering the scene.
   useEffect(() => {
+    // The ref makes this run once even under StrictMode's double effect, so
+    // the result must not be discarded on cleanup.
     if (!experiment || results || requestedFor.current === experiment.id) return;
     requestedFor.current = experiment.id;
-    let cancelled = false;
     tracked({ method: "GET", path: `/experiments/${experiment.id}/results` }, 200, () =>
       api.getResults(experiment.id),
     )
-      .then((r) => {
-        if (!cancelled) setResults(r);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(unreachable(e));
-      });
-    return () => {
-      cancelled = true;
-    };
+      .then((r) => setResults(r))
+      .catch((e: unknown) => setError(unreachable(e)));
   }, [experiment, results]);
 
   if (!experiment) {

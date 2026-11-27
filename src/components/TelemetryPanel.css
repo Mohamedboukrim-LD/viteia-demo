@@ -87,3 +87,4 @@
 
 .telemetry__event--alarm { border-left-color: var(--signal); font-weight: 600; }
 .telemetry__event--info { border-left-color: var(--ok); }
+.telemetry__event--warning { border-left-color: var(--focus); }

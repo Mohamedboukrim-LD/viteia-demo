@@ -4,6 +4,7 @@ import "./TelemetryPanel.css";
 
 type Props = {
   replay: ReplayState;
+  injected: { t: number; message: string }[];
   testbedIds: string[];
   nameOf: (id: string) => string;
 };
@@ -37,7 +38,12 @@ function Column({ sample, name }: { sample: TelemetrySample | undefined; name: s
   );
 }
 
-export function TelemetryPanel({ replay, testbedIds, nameOf }: Props) {
+export function TelemetryPanel({ replay, injected, testbedIds, nameOf }: Props) {
+  // Detected by the testbeds and injected by the user, in one feed, newest first.
+  const feed = [
+    ...replay.events.map((e) => ({ t: e.t, message: e.message, severity: e.severity, key: `d-${e.t}-${e.type}` })),
+    ...injected.map((e, i) => ({ t: e.t, message: e.message, severity: "warning" as const, key: `i-${i}` })),
+  ].sort((a, b) => b.t - a.t);
   return (
     <section className="telemetry" aria-label="Live telemetry" aria-live="polite">
       <div className="telemetry__head">
@@ -55,15 +61,12 @@ export function TelemetryPanel({ replay, testbedIds, nameOf }: Props) {
         ))}
       </div>
       <ul className="telemetry__events" aria-label="Events detected">
-        {replay.events
-          .slice()
-          .reverse()
-          .map((e) => (
-            <li key={`${e.t}-${e.type}`} className={`telemetry__event telemetry__event--${e.severity}`}>
-              <span>{e.t.toFixed(0)} s</span>
-              <span>{e.message}</span>
-            </li>
-          ))}
+        {feed.map((e) => (
+          <li key={e.key} className={`telemetry__event telemetry__event--${e.severity}`}>
+            <span>{e.t.toFixed(0)} s</span>
+            <span>{e.message}</span>
+          </li>
+        ))}
       </ul>
     </section>
   );

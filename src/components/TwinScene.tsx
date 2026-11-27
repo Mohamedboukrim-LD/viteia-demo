@@ -12,6 +12,7 @@ type Props = {
   robotTarget: { x?: number; y?: number; z?: number } | null;
   robotSpeed: number;
   alarm: boolean;
+  obstacle: boolean;
 };
 
 const COLORS = {
@@ -81,6 +82,46 @@ function Worker({ position, moving }: { position: [number, number, number]; movi
   );
 }
 
+/* The worker who walks into the red zone at the tunnel entrance during the
+   alarm, and back out when the zone is cleared. */
+function Intruder({ inside }: { inside: boolean }) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame((_, delta) => {
+    if (!ref.current) return;
+    const targetX = inside ? 8.5 : 4.5;
+    ref.current.position.x += (targetX - ref.current.position.x) * Math.min(1, delta * 1.2);
+  });
+  return (
+    <group ref={ref} position={[4.5, 0, 2]}>
+      <mesh position={[0, 0.5, 0]}>
+        <cylinderGeometry args={[0.25, 0.25, 1, 12]} />
+        <meshStandardMaterial color={COLORS.worker} />
+      </mesh>
+      <mesh position={[0, 1.2, 0]}>
+        <sphereGeometry args={[0.22, 12, 12]} />
+        <meshStandardMaterial color={COLORS.worker} />
+      </mesh>
+    </group>
+  );
+}
+
+/* The obstacle the user injects: a boulder at the tunnel entrance. */
+function Obstacle({ visible }: { visible: boolean }) {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame((_, delta) => {
+    if (!ref.current) return;
+    const target = visible ? 1 : 0;
+    const k = ref.current.scale.x + (target - ref.current.scale.x) * Math.min(1, delta * 4);
+    ref.current.scale.setScalar(k);
+  });
+  return (
+    <mesh ref={ref} position={[10.5, 0.7, -1]} scale={0}>
+      <dodecahedronGeometry args={[0.9, 0]} />
+      <meshStandardMaterial color="#3b3f44" flatShading />
+    </mesh>
+  );
+}
+
 function Sensor({ position }: { position: [number, number, number] }) {
   return (
     <group position={position}>
@@ -99,7 +140,7 @@ function Sensor({ position }: { position: [number, number, number] }) {
 function RedZone({ position, size, active }: { position: [number, number, number]; size: [number, number]; active: boolean }) {
   const ref = useRef<THREE.MeshStandardMaterial>(null);
   useFrame(({ clock }) => {
-    if (ref.current) ref.current.opacity = active ? 0.55 + Math.sin(clock.elapsedTime * 6) * 0.2 : 0.25;
+    if (ref.current) ref.current.opacity = active ? 0.6 + Math.sin(clock.elapsedTime * 8) * 0.3 : 0.25;
   });
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={position}>
@@ -148,7 +189,7 @@ function Camera() {
   return null;
 }
 
-export function TwinScene({ robotTarget, robotSpeed, alarm }: Props) {
+export function TwinScene({ robotTarget, robotSpeed, alarm, obstacle }: Props) {
   const target = new THREE.Vector3(robotTarget?.x ?? -12, robotTarget?.y ?? 0, robotTarget?.z ?? 0);
   return (
     <div className="scene3d" aria-label="Digital twin of the construction site">
@@ -164,7 +205,8 @@ export function TwinScene({ robotTarget, robotSpeed, alarm }: Props) {
         <RedZone position={[-2, 0.01, -5]} size={[6, 3]} active={false} />
         <Worker position={[-4, 0, 4]} moving />
         <Worker position={[2, 0, -4]} moving />
-        <Worker position={[alarm ? 8.5 : 5.5, 0, 2]} />
+        <Intruder inside={alarm} />
+        <Obstacle visible={obstacle} />
         <Sensor position={[-8, 0, 3.5]} />
         <Sensor position={[0, 0, 3.5]} />
         <Sensor position={[8, 0, 3.5]} />

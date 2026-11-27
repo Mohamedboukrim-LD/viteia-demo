@@ -21,6 +21,7 @@ export function Twin() {
   const setTelemetry = useDemoStore((s) => s.setTelemetry);
   const testbeds = useDemoStore((s) => s.testbeds);
   const [error, setError] = useState<string | null>(null);
+  const [injected, setInjected] = useState<{ t: number; message: string }[]>([]);
   const requestedFor = useRef<string | null>(null);
 
   const nameOf = (id: string) => testbeds.find((t) => t.id === id)?.name ?? id;
@@ -29,21 +30,15 @@ export function Twin() {
 
   // On entering the scene: GET /experiments/{id}/telemetry, then replay it.
   useEffect(() => {
+    // The ref makes this run once even under StrictMode's double effect, so
+    // the result must not be discarded on cleanup.
     if (!experiment || telemetry || requestedFor.current === experiment.id) return;
     requestedFor.current = experiment.id;
-    let cancelled = false;
     tracked({ method: "GET", path: `/experiments/${experiment.id}/telemetry` }, 200, () =>
       api.getTelemetry(experiment.id),
     )
-      .then((batch) => {
-        if (!cancelled) setTelemetry(batch);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(unreachable(e));
-      });
-    return () => {
-      cancelled = true;
-    };
+      .then((batch) => setTelemetry(batch))
+      .catch((e: unknown) => setError(unreachable(e)));
   }, [experiment, telemetry, setTelemetry]);
 
   // Phase "event": POST /experiments/{id}/events with the scripted stimulus.
@@ -53,6 +48,13 @@ export function Twin() {
     tracked({ method: "POST", path: `/experiments/${experiment.id}/events`, request: OBSTACLE_EVENT }, 202, () =>
       api.injectEvent(experiment.id, OBSTACLE_EVENT),
     )
+      .then((ack) => {
+        if (cancelled) return;
+        setInjected((list) => [
+          ...list,
+          { t: replay.t, message: `Obstacle injected at ${OBSTACLE_EVENT.payload?.location} (${ack.eventId})` },
+        ]);
+      })
       .catch((e: unknown) => {
         if (!cancelled) setError(unreachable(e));
       })
@@ -62,6 +64,8 @@ export function Twin() {
     return () => {
       cancelled = true;
     };
+    // replay.t is read once, at injection time, on purpose.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, experiment, setPhase]);
 
   // Phase "stopping": POST /experiments/{id}/stop. The replay freezes.
@@ -114,6 +118,7 @@ export function Twin() {
           robotTarget={sofia?.robotPosition ?? null}
           robotSpeed={running ? (sofia?.robotSpeedMs ?? 0) : 0}
           alarm={replay.alarm !== null}
+          obstacle={injected.length > 0}
         />
 
         <div className="twin__controls">
@@ -133,7 +138,7 @@ export function Twin() {
       </section>
 
       <div className="twin__side">
-        <TelemetryPanel replay={replay} testbedIds={experiment.testbedIds} nameOf={nameOf} />
+        <TelemetryPanel replay={replay} injected={injected} testbedIds={experiment.testbedIds} nameOf={nameOf} />
         <ApiPanel />
       </div>
     </div>
