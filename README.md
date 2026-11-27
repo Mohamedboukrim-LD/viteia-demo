@@ -40,9 +40,11 @@ openapi/openapi.yaml      the specification (the only real piece)
 src/api/client.ts         single entry point for every API call, typed from the spec
 src/store/demoStore.ts    demo state shared across scenes
 src/director/             recording steps and the space-bar hook
-src/data/proposal.ts      scripted content of scene 2 (no LLM)
+src/api/log.ts            log of the API calls made, shown by the API panel
+src/telemetry/useReplay.ts replays a telemetry batch in real time
+src/data/proposal.ts      scripted content of scenes 2 and 3 (no LLM)
 src/scenes/               one component per scene (route)
-src/components/           map, filters, list, assistant chat, API panel
+src/components/           map, filters, list, assistant chat, API panel, 3D scene, telemetry panel, API docs
 src/styles/tokens.css     temporary design tokens, to be replaced by the final design
 ```
 
@@ -59,9 +61,9 @@ src/styles/tokens.css     temporary design tokens, to be replaced by the final d
 | # | Category | Spec | Mock | Scene | Status |
 |---|----------|------|------|-------|--------|
 | 1 | testbeds | done | done | Catalogue (scene 1) | tested |
-| 2 | bookings | done | done | Request (scene 2) | ready for review |
-| 3 | experiments | | | Request (scene 2) | |
-| 4 | telemetry, results | | | Digital twin (scene 3), Results (scene 4) | |
+| 2 | bookings | done | done | Request (scene 2) | tested |
+| 3 | experiments | done | done | Request (scene 2), Digital twin (scene 3) | tested |
+| 4 | telemetry, results | done | done | Digital twin (scene 3), Results (scene 4) | ready for review |
 | 5 | assets | | | Request (scene 2, one line) | |
 | 6 | identity | | | none | |
 
@@ -85,3 +87,33 @@ src/styles/tokens.css     temporary design tokens, to be replaced by the final d
   request references them, it does not describe hardware again.
 - Scene 2 is driven by a `requestPhase` in the store so the director can
   replay it identically; the assistant's text is scripted in `src/data/proposal.ts`.
+
+## Decisions taken in tranche 3
+
+- An experiment belongs to one confirmed booking and can only reference the
+  booking's testbeds. `steps` describe the multi-testbed workflow (order,
+  testbed, role); the federation orchestrates them.
+- Lifecycle as sub-resources, not status patches: `POST /start`, `/stop`,
+  `/events`. Each returns 202 because the federation forwards the request to
+  the testbeds and confirms asynchronously.
+- Events are stimuli the user sends into the scenario (obstacle, network
+  degradation). Alarms detected by the testbeds come back on the telemetry
+  stream (tranche 4), not through this endpoint.
+- Every call the portal makes goes through `tracked()` in `src/api/log.ts`, so
+  the API panel shows the full history of the session.
+
+## Decisions taken in tranche 4
+
+- Telemetry has two forms on one endpoint: a stream (`text/event-stream`) while
+  the experiment runs, and a batch (`application/json`, `since=`) to replay. The
+  demo uses the batch and replays it in real time with `useReplay`; the sample
+  times live in the spec example, not in the app.
+- Events in telemetry are what the testbeds detect (zone violation, robot
+  stopped, zone cleared); they are distinct from events the user injects. An
+  alarm stays active until a `-cleared` event follows.
+- Results aggregate the telemetry per testbed and overall, and state whether
+  the QoS requested in the booking was met.
+- The 3D scene is built from primitives; each part is a component so a GLB
+  model can replace it with drei's `useGLTF`. Models are a separate decision.
+- The documentation page is Swagger UI reading `openapi.yaml` itself, loaded
+  only when the last step of scene 4 is reached.
