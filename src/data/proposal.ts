@@ -1,4 +1,4 @@
-import type { BookingRequest } from "../api/client";
+import type { BookingRequest, ExperimentEvent, ExperimentRequest } from "../api/client";
 
 /* Scripted content of scene 2. There is no LLM: the assistant's answer is
    written here and matches the example in openapi.yaml. */
@@ -26,4 +26,24 @@ export const CAPABILITY_LABEL: Record<string, string> = {
   "cap-dt-engine": "Site digital twin runtime",
   "cap-5g-slice": "Private 5G slice",
   "cap-xr-headset": "XR headset",
+};
+
+export const EXPERIMENT_REQUEST = (bookingId: string): ExperimentRequest => ({
+  bookingId,
+  name: "Tunnel inspection with quadruped robot",
+  scenario: {
+    name: "highway-site-tunnel-inspection",
+    assetIds: [],
+    parameters: { durationMinutes: 90, inspectionRoute: "tunnel-north", alertZones: ["red-zone-1", "red-zone-2"] },
+  },
+  steps: [
+    { order: 1, testbedId: "tb-sofia-robotics", role: "run-twin", description: "Run the site digital twin and the robot" },
+    { order: 2, testbedId: "tb-oulu-5g-xr", role: "stream-xr", description: "Stream the twin to two headsets over the 5G slice" },
+  ],
+});
+
+export const OBSTACLE_EVENT: ExperimentEvent = {
+  type: "obstacle",
+  testbedId: "tb-sofia-robotics",
+  payload: { location: "tunnel-north-entrance", size: "large" },
 };

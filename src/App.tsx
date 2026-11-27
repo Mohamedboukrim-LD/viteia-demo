@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useDirector } from "./director/useDirector";
 import { Catalog } from "./scenes/Catalog";
 import { Request } from "./scenes/Request";
+import { Twin } from "./scenes/Twin";
 import { useDemoStore } from "./store/demoStore";
 
 const SCENE_TITLE: Record<string, string> = {
@@ -44,7 +45,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/catalog" replace />} />
           <Route path="/catalog" element={<Catalog />} />
           <Route path="/request" element={<Request />} />
-          <Route path="/twin" element={<Placeholder name="Digital twin" tranche="tranche 3 (experiments) and 4 (telemetry)" />} />
+          <Route path="/twin" element={<Twin />} />
           <Route path="/results" element={<Placeholder name="Results" tranche="tranche 4 (results)" />} />
         </Routes>
       </main>

@@ -7,6 +7,10 @@ export type Domain = components["schemas"]["Domain"];
 export type Booking = components["schemas"]["Booking"];
 export type BookingRequest = components["schemas"]["BookingRequest"];
 export type BookingProblem = components["schemas"]["BookingProblem"];
+export type Experiment = components["schemas"]["Experiment"];
+export type ExperimentRequest = components["schemas"]["ExperimentRequest"];
+export type ExperimentEvent = components["schemas"]["ExperimentEvent"];
+export type EventAck = components["schemas"]["EventAck"];
 
 // Mock: http://localhost:4010 (Prism). Real gateway: set VITE_API_BASE to ".../v1".
 const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4010";
@@ -39,11 +43,11 @@ async function get<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) throw await readError(res, "POST", path);
   return (await res.json()) as T;
@@ -73,4 +77,10 @@ export const api = {
   createBooking: (body: BookingRequest) => post<Booking>("/bookings", body),
   getBooking: (id: string) => get<Booking>(`/bookings/${id}`),
   cancelBooking: (id: string) => del(`/bookings/${id}`),
+
+  createExperiment: (body: ExperimentRequest) => post<Experiment>("/experiments", body),
+  getExperiment: (id: string) => get<Experiment>(`/experiments/${id}`),
+  startExperiment: (id: string) => post<Experiment>(`/experiments/${id}/start`),
+  injectEvent: (id: string, event: ExperimentEvent) => post<EventAck>(`/experiments/${id}/events`, event),
+  stopExperiment: (id: string) => post<Experiment>(`/experiments/${id}/stop`),
 };

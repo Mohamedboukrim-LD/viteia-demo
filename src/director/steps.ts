@@ -48,9 +48,27 @@ export const steps: Record<string, Step[]> = {
       run: () => useDemoStore.getState().setRequestPhase("booking"),
     },
     {
+      label: "Create and start the experiment (POST /experiments, /start)",
+      run: () => useDemoStore.getState().setRequestPhase("starting"),
+    },
+    {
       label: "Go to the digital twin",
       run: (navigate) => navigate("/twin"),
     },
   ],
-  // Tranche 3+: "/twin", "/results"
+  "/twin": [
+    {
+      label: "Inject an obstacle in the tunnel (POST /events)",
+      run: () => useDemoStore.getState().setTwinPhase("event"),
+    },
+    {
+      label: "Stop the experiment (POST /stop)",
+      run: () => useDemoStore.getState().setTwinPhase("stopping"),
+    },
+    {
+      label: "Go to the results",
+      run: (navigate) => navigate("/results"),
+    },
+  ],
+  // Tranche 4: "/results"
 };

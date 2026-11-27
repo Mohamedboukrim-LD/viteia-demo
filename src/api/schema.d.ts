@@ -116,6 +116,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/experiments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create an experiment inside a confirmed booking
+         * @description Validates that the booking is confirmed and that every step references a
+         *     testbed of that booking. The experiment is created in status `created`;
+         *     it does not run until `start` is called.
+         */
+        post: operations["createExperiment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/experiments/{experimentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one experiment
+         * @description Current status and timestamps of an experiment.
+         */
+        get: operations["getExperiment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/experiments/{experimentId}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start an experiment
+         * @description Asks every testbed in the workflow to start its step. Returns as soon as
+         *     the federation has accepted the request; the status moves to `running`
+         *     when all testbeds confirm, and progress arrives on the telemetry stream
+         *     (tranche 4).
+         */
+        post: operations["startExperiment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/experiments/{experimentId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inject an event into a running experiment
+         * @description A stimulus the user sends to the scenario while it runs: an obstacle in
+         *     front of the robot, a network degradation, a sensor failure. The testbed
+         *     named in `testbedId` applies it; without `testbedId` the federation
+         *     routes it to every testbed in the workflow.
+         */
+        post: operations["injectEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/experiments/{experimentId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop an experiment
+         * @description Stops every step and releases the testbeds. Results (tranche 4) become available once the status is `stopped` or `completed`.
+         */
+        post: operations["stopExperiment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -235,6 +343,62 @@ export interface components {
         BookingProblem: components["schemas"]["Problem"] & {
             violations?: components["schemas"]["QoSViolation"][];
         };
+        /** @enum {string} */
+        ExperimentStatus: "created" | "starting" | "running" | "paused" | "completed" | "stopped" | "failed";
+        /** @description One stage of a multi-testbed workflow. */
+        WorkflowStep: {
+            order: number;
+            testbedId: string;
+            /** @description What this testbed does in the experiment, e.g. `run-twin`, `operate-robot`, `stream-xr`. */
+            role: string;
+            description?: string;
+        };
+        Scenario: {
+            name: string;
+            /** @description 3D assets uploaded through the assets category (tranche 5). */
+            assetIds?: string[];
+            /** @description Free-form scenario parameters, interpreted by the testbeds. */
+            parameters?: {
+                [key: string]: unknown;
+            };
+        };
+        ExperimentRequest: {
+            bookingId: string;
+            name: string;
+            scenario: components["schemas"]["Scenario"];
+            steps: components["schemas"]["WorkflowStep"][];
+        };
+        Experiment: {
+            id: string;
+            bookingId: string;
+            name: string;
+            status: components["schemas"]["ExperimentStatus"];
+            testbedIds: string[];
+            scenario?: components["schemas"]["Scenario"];
+            steps: components["schemas"]["WorkflowStep"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            startedAt?: string | null;
+            /** Format: date-time */
+            stoppedAt?: string | null;
+            /** @description Path of the telemetry stream while running (tranche 4). */
+            telemetryStream?: string | null;
+        };
+        ExperimentEvent: {
+            /** @description Event type agreed in the scenario, e.g. `obstacle`, `network-degradation`, `sensor-failure`. */
+            type: string;
+            testbedId?: string;
+            payload?: {
+                [key: string]: unknown;
+            };
+        };
+        EventAck: {
+            eventId: string;
+            experimentId: string;
+            /** Format: date-time */
+            acceptedAt: string;
+        };
         /** @description Error body, RFC 9457. */
         Problem: {
             /** Format: uri */
@@ -281,6 +445,7 @@ export interface components {
     parameters: {
         TestbedId: string;
         BookingId: string;
+        ExperimentId: string;
     };
     requestBodies: never;
     headers: never;
@@ -469,6 +634,199 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    createExperiment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExperimentRequest"];
+            };
+        };
+        responses: {
+            /** @description The experiment, not yet started. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Experiment"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The booking is not confirmed, or its window is over. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://api.viteia.example/problems/booking-not-confirmed",
+                     *       "title": "Booking is not confirmed",
+                     *       "status": 409
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A step references a testbed outside the booking. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://api.viteia.example/problems/step-outside-booking",
+                     *       "title": "Step references a testbed not in the booking",
+                     *       "status": 422,
+                     *       "detail": "Step 2 references tb-berlin-5g, booking bk-2027-0142 covers tb-sofia-robotics and tb-oulu-5g-xr."
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getExperiment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experimentId: components["parameters"]["ExperimentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The experiment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Experiment"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    startExperiment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experimentId: components["parameters"]["ExperimentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Start accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Experiment"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description The experiment is not in status `created` or `paused`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://api.viteia.example/problems/invalid-transition",
+                     *       "title": "Experiment cannot be started from its current status",
+                     *       "status": 409
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    injectEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experimentId: components["parameters"]["ExperimentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExperimentEvent"];
+            };
+        };
+        responses: {
+            /** @description Event accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "eventId": "ev-0007",
+                     *       "experimentId": "ex-2027-0391",
+                     *       "acceptedAt": "2027-02-03T09:21:40Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["EventAck"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description The experiment is not running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://api.viteia.example/problems/not-running",
+                     *       "title": "Experiment is not running",
+                     *       "status": 409
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    stopExperiment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experimentId: components["parameters"]["ExperimentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stop accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Experiment"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
 }
