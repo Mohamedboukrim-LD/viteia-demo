@@ -1,0 +1,11 @@
+.docs {
+  height: 100%;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.docs .swagger-ui .info { margin: 16px 0; }
+.docs .swagger-ui .info .title { font-size: 1.4rem; }
+.docs .swagger-ui .scheme-container { display: none; }

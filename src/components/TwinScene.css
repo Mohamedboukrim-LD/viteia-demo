@@ -1,0 +1,11 @@
+.scene3d {
+  position: relative;
+  min-height: 0;
+  height: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #e8edf1;
+}
+
+.scene3d canvas { display: block; }

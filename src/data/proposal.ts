@@ -1,4 +1,4 @@
-import type { BookingRequest } from "../api/client";
+import type { BookingRequest, ExperimentEvent, ExperimentRequest } from "../api/client";
 
 /* Scripted content of scene 2. There is no LLM: the assistant's answer is
    written here and matches the example in openapi.yaml. */
@@ -7,7 +7,16 @@ export const USER_REQUEST =
   "I want to test a digital twin of a highway construction site, with a robot inspecting a tunnel.";
 
 export const ASSISTANT_REPLY =
-  "I found a combination on two testbeds. Sofia Robotics Lab provides a quadruped inspection robot and the site digital twin runtime. Oulu 5G/XR Lab provides a private 5G slice and two headsets to follow the site in VR. Both guarantee the latency and frame rate you need.";
+  "I found a combination on two testbeds. Sofia Robotics Lab provides a quadruped inspection robot and the site digital twin runtime. Oulu 5G/XR Lab provides a private 5G slice and two headsets to follow the site in VR. Both guarantee the latency and frame rate you need. I will load your site model tunnel_entrance_v3.glb into the twin.";
+
+/* The site model the user brings. In the demo it is a placeholder file: the
+   mock accepts any upload and answers with the asset metadata. */
+export const SITE_MODEL = {
+  fileName: "tunnel_entrance_v3.glb",
+  name: "tunnel_entrance_v3",
+  description: "Highway tunnel north entrance, as built, week 5",
+  visibility: "booking" as const,
+};
 
 export const PROPOSAL: BookingRequest = {
   purpose: "Test a digital twin of a highway construction site with a robot inspecting a tunnel",
@@ -26,4 +35,24 @@ export const CAPABILITY_LABEL: Record<string, string> = {
   "cap-dt-engine": "Site digital twin runtime",
   "cap-5g-slice": "Private 5G slice",
   "cap-xr-headset": "XR headset",
+};
+
+export const EXPERIMENT_REQUEST = (bookingId: string, assetIds: string[]): ExperimentRequest => ({
+  bookingId,
+  name: "Tunnel inspection with quadruped robot",
+  scenario: {
+    name: "highway-site-tunnel-inspection",
+    assetIds,
+    parameters: { durationMinutes: 90, inspectionRoute: "tunnel-north", alertZones: ["red-zone-1", "red-zone-2"] },
+  },
+  steps: [
+    { order: 1, testbedId: "tb-sofia-robotics", role: "run-twin", description: "Run the site digital twin and the robot" },
+    { order: 2, testbedId: "tb-oulu-5g-xr", role: "stream-xr", description: "Stream the twin to two headsets over the 5G slice" },
+  ],
+});
+
+export const OBSTACLE_EVENT: ExperimentEvent = {
+  type: "obstacle",
+  testbedId: "tb-sofia-robotics",
+  payload: { location: "tunnel-north-entrance", size: "large" },
 };

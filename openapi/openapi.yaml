@@ -1,16 +1,15 @@
 openapi: 3.1.0
 info:
   title: VITEIA TaaS API
-  version: 0.2.0
+  version: 0.6.0
   summary: Unified API for discovering, booking and running experiments on federated Virtual Worlds testbeds.
   description: |
     Draft specification prepared by Lasting Dynamics as the seed of task T3.3
     (VW TaaS APIs and interoperability requirements, deliverable D3.3).
 
-    The API is organised by resource category. Tranche 1 specified `testbeds`,
-    tranche 2 (this version) specifies `bookings`. The other categories are
-    declared as tags and will be specified in the next tranches, in this order:
-    experiments, telemetry, results, assets, identity.
+    The API is organised by resource category: testbeds, bookings, experiments,
+    telemetry, results, assets and identity. Every operation except
+    `POST /auth/token` requires a bearer token issued by the federation.
 
     All data in the examples is fictional demo data for the kick-off video.
     It does not describe any real partner facility.
@@ -22,6 +21,9 @@ servers:
   - url: https://api.viteia.example/v1
     description: Placeholder for the future gateway
 
+security:
+  - bearerAuth: []
+
 tags:
   - name: testbeds
     description: Catalogue of federated testbeds, their location, status and capabilities.
@@ -31,15 +33,34 @@ tags:
       needs. A booking is the precondition of an experiment: the experiment
       (tranche 3) runs inside a confirmed booking.
   - name: experiments
-    description: Creation, start, stimulation and stop of experiments, including multi-testbed workflows. (Tranche 3)
+    description: |
+      An experiment runs inside a confirmed booking: it is created, started,
+      stimulated with events and stopped. Its `steps` describe the multi-testbed
+      workflow (which testbed does what, in which order).
   - name: telemetry
-    description: Real-time data streams from running experiments. (Tranche 4)
+    description: |
+      Samples produced by the testbeds while an experiment runs: metrics
+      (latency, frame rate, robot position, bandwidth) and events detected by the
+      testbeds (zone violations, anomalies). Available as a stream or as batches.
   - name: results
-    description: Reports and metrics of completed experiments. (Tranche 4)
+    description: Aggregated metrics, event list and report of an experiment once it is stopped or completed.
   - name: assets
-    description: Upload, versioning and access control of 3D assets in glTF 2.0. (Tranche 5)
+    description: |
+      The 3D content a user brings to the federation: scenes and models in
+      glTF 2.0 (`.glb` or `.gltf`), so that every engine of every testbed can
+      load them. An asset has versions and a visibility that decides which
+      testbeds may read it. An experiment references assets by id in its scenario.
   - name: identity
-    description: Authentication and authorisation, aligned with the security framework of T2.4. (Tranche 6)
+    description: |
+      Who is calling and what they may do. A person signs in at their own
+      organisation's identity provider; the portal exchanges that identity for
+      a federation token. A service (a testbed adapter, an integration) uses
+      client credentials. The token carries scopes, one per category:
+      `testbeds:read`, `bookings:write`, `experiments:write`, `telemetry:read`,
+      `results:read`, `assets:write`, plus `testbeds:operate` for testbed
+      operators. Token lifetime, refresh and the trusted identity providers are
+      defined by the security framework of T2.4 (SmartAvatar); this category
+      defines the surface the portal and the testbeds use.
 
 paths:
   /testbeds:
@@ -244,6 +265,447 @@ paths:
                 title: Booking already started
                 status: 409
 
+  /experiments:
+    post:
+      tags: [experiments]
+      operationId: createExperiment
+      summary: Create an experiment inside a confirmed booking
+      description: |
+        Validates that the booking is confirmed and that every step references a
+        testbed of that booking. The experiment is created in status `created`;
+        it does not run until `start` is called.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentRequest'
+            examples:
+              highwayTwin:
+                $ref: '#/components/examples/ExperimentRequestHighwayTwin'
+      responses:
+        '201':
+          description: The experiment, not yet started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Experiment'
+              examples:
+                created:
+                  $ref: '#/components/examples/ExperimentCreated'
+        '409':
+          description: The booking is not confirmed, or its window is over.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.viteia.example/problems/booking-not-confirmed
+                title: Booking is not confirmed
+                status: 409
+        '422':
+          description: A step references a testbed outside the booking.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.viteia.example/problems/step-outside-booking
+                title: Step references a testbed not in the booking
+                status: 422
+                detail: Step 2 references tb-berlin-5g, booking bk-2027-0142 covers tb-sofia-robotics and tb-oulu-5g-xr.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /experiments/{experimentId}:
+    get:
+      tags: [experiments]
+      operationId: getExperiment
+      summary: Get one experiment
+      description: Current status and timestamps of an experiment.
+      parameters:
+        - $ref: '#/components/parameters/ExperimentId'
+      responses:
+        '200':
+          description: The experiment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Experiment'
+              examples:
+                running:
+                  $ref: '#/components/examples/ExperimentRunning'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /experiments/{experimentId}/start:
+    post:
+      tags: [experiments]
+      operationId: startExperiment
+      summary: Start an experiment
+      description: |
+        Asks every testbed in the workflow to start its step. Returns as soon as
+        the federation has accepted the request; the status moves to `running`
+        when all testbeds confirm, and progress arrives on the telemetry stream
+        (tranche 4).
+      parameters:
+        - $ref: '#/components/parameters/ExperimentId'
+      responses:
+        '202':
+          description: Start accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Experiment'
+              examples:
+                running:
+                  $ref: '#/components/examples/ExperimentRunning'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The experiment is not in status `created` or `paused`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.viteia.example/problems/invalid-transition
+                title: Experiment cannot be started from its current status
+                status: 409
+
+  /experiments/{experimentId}/events:
+    post:
+      tags: [experiments]
+      operationId: injectEvent
+      summary: Inject an event into a running experiment
+      description: |
+        A stimulus the user sends to the scenario while it runs: an obstacle in
+        front of the robot, a network degradation, a sensor failure. The testbed
+        named in `testbedId` applies it; without `testbedId` the federation
+        routes it to every testbed in the workflow.
+      parameters:
+        - $ref: '#/components/parameters/ExperimentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentEvent'
+            examples:
+              obstacle:
+                $ref: '#/components/examples/EventObstacle'
+      responses:
+        '202':
+          description: Event accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventAck'
+              example:
+                eventId: ev-0007
+                experimentId: ex-2027-0391
+                acceptedAt: '2027-02-03T09:21:40Z'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The experiment is not running.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.viteia.example/problems/not-running
+                title: Experiment is not running
+                status: 409
+
+  /experiments/{experimentId}/stop:
+    post:
+      tags: [experiments]
+      operationId: stopExperiment
+      summary: Stop an experiment
+      description: Stops every step and releases the testbeds. Results (tranche 4) become available once the status is `stopped` or `completed`.
+      parameters:
+        - $ref: '#/components/parameters/ExperimentId'
+      responses:
+        '202':
+          description: Stop accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Experiment'
+              examples:
+                stopped:
+                  $ref: '#/components/examples/ExperimentStopped'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /experiments/{experimentId}/telemetry:
+    get:
+      tags: [telemetry]
+      operationId: getTelemetry
+      summary: Read the telemetry of an experiment
+      description: |
+        Two ways to read it. With `Accept: text/event-stream` the federation
+        keeps the connection open and pushes one `sample` event per
+        TelemetrySample as the testbeds produce them. With `Accept:
+        application/json` it returns the samples recorded since `since`
+        (seconds from the start of the experiment), in one batch. The portal
+        uses the stream while the experiment runs and the batch to replay it.
+        The mock serves the batch only.
+      parameters:
+        - $ref: '#/components/parameters/ExperimentId'
+        - name: since
+          in: query
+          required: false
+          description: Return samples with `t` greater than this value, in seconds from the start.
+          schema:
+            type: number
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: The samples.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryBatch'
+              examples:
+                highwayTwin:
+                  $ref: '#/components/examples/TelemetryHighwayTwin'
+            text/event-stream:
+              schema:
+                type: string
+                description: "One `event: sample` per TelemetrySample, with the JSON in the `data` field."
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /experiments/{experimentId}/results:
+    get:
+      tags: [results]
+      operationId: getResults
+      summary: Read the results of an experiment
+      description: |
+        Available once the experiment is `stopped` or `completed`. Aggregates
+        the telemetry per testbed and overall, lists the events detected and
+        says whether the QoS requested in the booking was met.
+      parameters:
+        - $ref: '#/components/parameters/ExperimentId'
+      responses:
+        '200':
+          description: The results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentResults'
+              examples:
+                highwayTwin:
+                  $ref: '#/components/examples/ResultsHighwayTwin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The experiment is still running.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.viteia.example/problems/results-not-ready
+                title: Results are not available while the experiment runs
+                status: 409
+
+  /assets:
+    post:
+      tags: [assets]
+      operationId: uploadAsset
+      summary: Upload a 3D asset
+      description: |
+        Multipart upload of one glTF 2.0 file with its metadata. The federation
+        validates the file (glTF 2.0, size limit, no external references),
+        stores it and answers `201` with status `processing`; the status becomes
+        `ready` once the file is validated and converted for every engine.
+        Uploading a file with the `name` of an existing asset of the same
+        organisation creates a new version of that asset.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssetUpload'
+            encoding:
+              file:
+                contentType: model/gltf-binary, model/gltf+json
+      responses:
+        '201':
+          description: The asset, in status `processing`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+              examples:
+                tunnelEntrance:
+                  $ref: '#/components/examples/AssetTunnelEntrance'
+        '413':
+          description: The file exceeds the size limit.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.viteia.example/problems/asset-too-large
+                title: Asset exceeds the size limit
+                status: 413
+                detail: Limit is 500 MB per file.
+        '422':
+          description: The file is not valid glTF 2.0.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.viteia.example/problems/asset-invalid
+                title: File is not valid glTF 2.0
+                status: 422
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /assets/{assetId}:
+    get:
+      tags: [assets]
+      operationId: getAsset
+      summary: Get one asset
+      description: Metadata and status of the latest version of an asset.
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: The asset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+              examples:
+                tunnelEntrance:
+                  $ref: '#/components/examples/AssetTunnelEntranceReady'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [assets]
+      operationId: deleteAsset
+      summary: Delete an asset and all its versions
+      description: Refused while an experiment that references the asset is running.
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '204':
+          description: Deleted.
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: A running experiment references the asset.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.viteia.example/problems/asset-in-use
+                title: Asset is referenced by a running experiment
+                status: 409
+
+  /assets/{assetId}/versions:
+    get:
+      tags: [assets]
+      operationId: listAssetVersions
+      summary: List the versions of an asset
+      description: Newest first. An experiment records which version it used, so a test run in March can say it ran on version 3.
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: The versions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetVersionList'
+              example:
+                assetId: as-tunnel-entrance
+                items:
+                  - { version: 3, sizeBytes: 1843200, status: ready, createdAt: '2027-02-02T16:40:00Z' }
+                  - { version: 2, sizeBytes: 1790000, status: ready, createdAt: '2027-01-26T10:05:00Z' }
+                  - { version: 1, sizeBytes: 1650000, status: ready, createdAt: '2027-01-19T09:30:00Z' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /auth/token:
+    post:
+      tags: [identity]
+      operationId: issueToken
+      security: []
+      summary: Obtain a federation token
+      description: |
+        Two grants. `federated`: the caller is a person already signed in at a
+        trusted identity provider; the portal sends the provider's ID token and
+        receives a federation token with the person's scopes.
+        `client_credentials`: the caller is a service with an id and a secret.
+        The mock accepts any request and answers with a demo token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+            examples:
+              federated:
+                value: { grantType: federated, idToken: eyJhbGciOi…, scope: "testbeds:read bookings:write experiments:write telemetry:read results:read assets:write" }
+              service:
+                value: { grantType: client_credentials, clientId: sofia-robotics-adapter, clientSecret: "…", scope: "testbeds:operate telemetry:read" }
+      responses:
+        '200':
+          description: The token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+              example:
+                accessToken: demo.federation.token
+                tokenType: Bearer
+                expiresIn: 3600
+                scope: "testbeds:read bookings:write experiments:write telemetry:read results:read assets:write"
+        '401':
+          description: Unknown client, invalid secret, or ID token not trusted.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.viteia.example/problems/invalid-grant
+                title: Credentials not accepted
+                status: 401
+
+  /auth/me:
+    get:
+      tags: [identity]
+      operationId: getPrincipal
+      summary: Who am I
+      description: The identity behind the current token, its organisation, roles and scopes. Used by the portal to decide what to show.
+      responses:
+        '200':
+          description: The principal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Principal'
+              example:
+                subject: usr-7f3a
+                kind: person
+                displayName: Demo user
+                organisation: { id: org-demo-construction, name: Demo construction company, country: BG }
+                roles: [user]
+                scopes: [testbeds:read, bookings:write, experiments:write, telemetry:read, results:read, assets:write]
+                testbedIds: []
+                expiresAt: '2027-02-03T10:03:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
 components:
   parameters:
     TestbedId:
@@ -262,6 +724,22 @@ components:
         type: string
         pattern: '^bk-[a-z0-9-]+$'
         example: bk-2027-0142
+    ExperimentId:
+      name: experimentId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^ex-[a-z0-9-]+$'
+        example: ex-2027-0391
+    AssetId:
+      name: assetId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^as-[a-z0-9-]+$'
+        example: as-tunnel-entrance
 
   responses:
     NotFound:
@@ -538,6 +1016,424 @@ components:
               items:
                 $ref: '#/components/schemas/QoSViolation'
 
+    ExperimentStatus:
+      type: string
+      enum: [created, starting, running, paused, completed, stopped, failed]
+
+    WorkflowStep:
+      type: object
+      description: One stage of a multi-testbed workflow.
+      required: [order, testbedId, role]
+      properties:
+        order:
+          type: integer
+          minimum: 1
+        testbedId:
+          type: string
+        role:
+          type: string
+          description: What this testbed does in the experiment, e.g. `run-twin`, `operate-robot`, `stream-xr`.
+        description:
+          type: string
+
+    Scenario:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        assetIds:
+          type: array
+          description: 3D assets uploaded through the assets category (tranche 5).
+          items:
+            type: string
+        parameters:
+          type: object
+          description: Free-form scenario parameters, interpreted by the testbeds.
+          additionalProperties: true
+
+    ExperimentRequest:
+      type: object
+      required: [bookingId, name, scenario, steps]
+      properties:
+        bookingId:
+          type: string
+        name:
+          type: string
+          maxLength: 120
+        scenario:
+          $ref: '#/components/schemas/Scenario'
+        steps:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/WorkflowStep'
+
+    Experiment:
+      type: object
+      required: [id, bookingId, name, status, testbedIds, steps, createdAt]
+      properties:
+        id:
+          type: string
+          pattern: '^ex-[a-z0-9-]+$'
+        bookingId:
+          type: string
+        name:
+          type: string
+        status:
+          $ref: '#/components/schemas/ExperimentStatus'
+        testbedIds:
+          type: array
+          items:
+            type: string
+        scenario:
+          $ref: '#/components/schemas/Scenario'
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowStep'
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: [string, 'null']
+          format: date-time
+        stoppedAt:
+          type: [string, 'null']
+          format: date-time
+        telemetryStream:
+          type: [string, 'null']
+          description: Path of the telemetry stream while running (tranche 4).
+
+    ExperimentEvent:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          description: Event type agreed in the scenario, e.g. `obstacle`, `network-degradation`, `sensor-failure`.
+        testbedId:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+
+    EventAck:
+      type: object
+      required: [eventId, experimentId, acceptedAt]
+      properties:
+        eventId:
+          type: string
+        experimentId:
+          type: string
+        acceptedAt:
+          type: string
+          format: date-time
+
+    TelemetryEvent:
+      type: object
+      description: Something a testbed detected, as opposed to an event injected by the user.
+      required: [type, severity, message]
+      properties:
+        type:
+          type: string
+          description: e.g. `zone-violation`, `zone-cleared`, `robot-stopped`, `anomaly`.
+        severity:
+          type: string
+          enum: [info, warning, alarm]
+        zoneId:
+          type: string
+        subject:
+          type: string
+          description: Who or what the event is about, e.g. `worker-3`, `robot-1`.
+        message:
+          type: string
+
+    TelemetrySample:
+      type: object
+      required: [t, testbedId, metrics]
+      properties:
+        t:
+          type: number
+          description: Seconds since the experiment started.
+        testbedId:
+          type: string
+        metrics:
+          type: object
+          description: Metric names depend on the capability; common ones are listed.
+          properties:
+            latencyMs:
+              type: number
+            frameRate:
+              type: number
+            bandwidthMbps:
+              type: number
+            robotPosition:
+              type: object
+              properties:
+                x: { type: number }
+                y: { type: number }
+                z: { type: number }
+            robotSpeedMs:
+              type: number
+          additionalProperties: true
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/TelemetryEvent'
+
+    TelemetryBatch:
+      type: object
+      required: [experimentId, from, to, samples]
+      properties:
+        experimentId:
+          type: string
+        from:
+          type: number
+        to:
+          type: number
+        samples:
+          type: array
+          items:
+            $ref: '#/components/schemas/TelemetrySample'
+
+    ResultMetrics:
+      type: object
+      required: [avgLatencyMs, availabilityPct, eventsDetected, samples]
+      properties:
+        avgLatencyMs:
+          type: number
+        p95LatencyMs:
+          type: number
+        availabilityPct:
+          type: number
+        avgFrameRate:
+          type: [number, 'null']
+        eventsDetected:
+          type: integer
+        samples:
+          type: integer
+
+    TestbedResult:
+      type: object
+      required: [testbedId, avgLatencyMs, availabilityPct, eventsDetected]
+      properties:
+        testbedId:
+          type: string
+        avgLatencyMs:
+          type: number
+        availabilityPct:
+          type: number
+        eventsDetected:
+          type: integer
+
+    ExperimentResults:
+      type: object
+      required: [experimentId, status, window, metrics, perTestbed, events, qosMet]
+      properties:
+        experimentId:
+          type: string
+        status:
+          $ref: '#/components/schemas/ExperimentStatus'
+        window:
+          $ref: '#/components/schemas/TimeWindow'
+        metrics:
+          $ref: '#/components/schemas/ResultMetrics'
+        perTestbed:
+          type: array
+          items:
+            $ref: '#/components/schemas/TestbedResult'
+        events:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/TelemetryEvent'
+              - type: object
+                required: [t, testbedId]
+                properties:
+                  t: { type: number }
+                  testbedId: { type: string }
+        qosMet:
+          type: boolean
+          description: Whether every testbed stayed within the QoS requested in the booking.
+        reportUrl:
+          type: string
+          description: Downloadable report (format defined later).
+
+    AssetVisibility:
+      type: string
+      description: |
+        Who may read the file. `private`: only the owning organisation.
+        `booking`: the testbeds of the bookings the asset is used in, for the
+        duration of the booking. `federation`: every testbed of the federation.
+      enum: [private, booking, federation]
+
+    AssetStatus:
+      type: string
+      enum: [processing, ready, rejected]
+
+    AssetUpload:
+      type: object
+      required: [file, name]
+      properties:
+        file:
+          type: string
+          format: binary
+          description: glTF 2.0 file, `.glb` or `.gltf` without external references.
+        name:
+          type: string
+          maxLength: 120
+          description: Stable name of the asset; a new upload with the same name creates a new version.
+        visibility:
+          $ref: '#/components/schemas/AssetVisibility'
+        description:
+          type: string
+          maxLength: 500
+
+    Asset:
+      type: object
+      required: [id, name, format, version, status, visibility, sizeBytes, createdAt]
+      properties:
+        id:
+          type: string
+          pattern: '^as-[a-z0-9-]+$'
+        name:
+          type: string
+        description:
+          type: string
+        format:
+          type: string
+          enum: [model/gltf-binary, model/gltf+json]
+        version:
+          type: integer
+          minimum: 1
+        status:
+          $ref: '#/components/schemas/AssetStatus'
+        visibility:
+          $ref: '#/components/schemas/AssetVisibility'
+        sizeBytes:
+          type: integer
+        ownerOrganisation:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    AssetVersion:
+      type: object
+      required: [version, sizeBytes, status, createdAt]
+      properties:
+        version:
+          type: integer
+        sizeBytes:
+          type: integer
+        status:
+          $ref: '#/components/schemas/AssetStatus'
+        createdAt:
+          type: string
+          format: date-time
+
+    AssetVersionList:
+      type: object
+      required: [assetId, items]
+      properties:
+        assetId:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetVersion'
+
+    Scope:
+      type: string
+      enum: [testbeds:read, testbeds:operate, bookings:write, experiments:write, telemetry:read, results:read, assets:write]
+
+    Role:
+      type: string
+      description: |
+        `user`: books and runs experiments for an organisation. `testbed-operator`:
+        manages one or more testbeds and sees their bookings. `federation-admin`:
+        manages the catalogue and the conformance of testbeds.
+      enum: [user, testbed-operator, federation-admin]
+
+    TokenRequest:
+      type: object
+      required: [grantType]
+      properties:
+        grantType:
+          type: string
+          enum: [federated, client_credentials]
+        idToken:
+          type: string
+          description: Required for `federated`. ID token from a trusted identity provider.
+        clientId:
+          type: string
+          description: Required for `client_credentials`.
+        clientSecret:
+          type: string
+          description: Required for `client_credentials`.
+        scope:
+          type: string
+          description: Space-separated scopes requested; the federation may grant fewer.
+
+    TokenResponse:
+      type: object
+      required: [accessToken, tokenType, expiresIn]
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+          enum: [Bearer]
+        expiresIn:
+          type: integer
+          description: Seconds until the token expires.
+        scope:
+          type: string
+
+    Organisation:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        country:
+          type: string
+          minLength: 2
+          maxLength: 2
+
+    Principal:
+      type: object
+      required: [subject, kind, organisation, roles, scopes, expiresAt]
+      properties:
+        subject:
+          type: string
+        kind:
+          type: string
+          enum: [person, service]
+        displayName:
+          type: string
+        organisation:
+          $ref: '#/components/schemas/Organisation'
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Scope'
+        testbedIds:
+          type: array
+          description: Testbeds this principal operates (role `testbed-operator`).
+          items:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+
     Problem:
       type: object
       description: Error body, RFC 9457.
@@ -558,7 +1454,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Defined in the identity tranche. Not enforced by the mock.
+      description: Federation token from `POST /auth/token`. The mock requires the header to be present and accepts any value.
 
   examples:
     SofiaRobotics:
@@ -598,6 +1494,306 @@ components:
         qos: { maxLatencyMs: 20, minFrameRate: 90 }
         testbedIds: [tb-sofia-robotics, tb-oulu-5g-xr]
         createdAt: '2027-01-20T10:15:00Z'
+    ExperimentRequestHighwayTwin:
+      value:
+        bookingId: bk-2027-0142
+        name: Tunnel inspection with quadruped robot
+        scenario:
+          name: highway-site-tunnel-inspection
+          assetIds: [as-tunnel-entrance]
+          parameters: { durationMinutes: 90, inspectionRoute: tunnel-north, alertZones: [red-zone-1, red-zone-2] }
+        steps:
+          - { order: 1, testbedId: tb-sofia-robotics, role: run-twin, description: Run the site digital twin and the robot }
+          - { order: 2, testbedId: tb-oulu-5g-xr, role: stream-xr, description: Stream the twin to two headsets over the 5G slice }
+    ExperimentCreated:
+      value:
+        id: ex-2027-0391
+        bookingId: bk-2027-0142
+        name: Tunnel inspection with quadruped robot
+        status: created
+        testbedIds: [tb-sofia-robotics, tb-oulu-5g-xr]
+        scenario:
+          name: highway-site-tunnel-inspection
+          assetIds: [as-tunnel-entrance]
+          parameters: { durationMinutes: 90, inspectionRoute: tunnel-north, alertZones: [red-zone-1, red-zone-2] }
+        steps:
+          - { order: 1, testbedId: tb-sofia-robotics, role: run-twin, description: Run the site digital twin and the robot }
+          - { order: 2, testbedId: tb-oulu-5g-xr, role: stream-xr, description: Stream the twin to two headsets over the 5G slice }
+        createdAt: '2027-02-03T09:02:10Z'
+        startedAt: null
+        stoppedAt: null
+        telemetryStream: null
+    ExperimentRunning:
+      value:
+        id: ex-2027-0391
+        bookingId: bk-2027-0142
+        name: Tunnel inspection with quadruped robot
+        status: running
+        testbedIds: [tb-sofia-robotics, tb-oulu-5g-xr]
+        scenario:
+          name: highway-site-tunnel-inspection
+          assetIds: [as-tunnel-entrance]
+          parameters: { durationMinutes: 90, inspectionRoute: tunnel-north, alertZones: [red-zone-1, red-zone-2] }
+        steps:
+          - { order: 1, testbedId: tb-sofia-robotics, role: run-twin, description: Run the site digital twin and the robot }
+          - { order: 2, testbedId: tb-oulu-5g-xr, role: stream-xr, description: Stream the twin to two headsets over the 5G slice }
+        createdAt: '2027-02-03T09:02:10Z'
+        startedAt: '2027-02-03T09:03:00Z'
+        stoppedAt: null
+        telemetryStream: /experiments/ex-2027-0391/telemetry
+    ExperimentStopped:
+      value:
+        id: ex-2027-0391
+        bookingId: bk-2027-0142
+        name: Tunnel inspection with quadruped robot
+        status: stopped
+        testbedIds: [tb-sofia-robotics, tb-oulu-5g-xr]
+        scenario:
+          name: highway-site-tunnel-inspection
+          assetIds: [as-tunnel-entrance]
+          parameters: { durationMinutes: 90, inspectionRoute: tunnel-north, alertZones: [red-zone-1, red-zone-2] }
+        steps:
+          - { order: 1, testbedId: tb-sofia-robotics, role: run-twin, description: Run the site digital twin and the robot }
+          - { order: 2, testbedId: tb-oulu-5g-xr, role: stream-xr, description: Stream the twin to two headsets over the 5G slice }
+        createdAt: '2027-02-03T09:02:10Z'
+        startedAt: '2027-02-03T09:03:00Z'
+        stoppedAt: '2027-02-03T09:48:30Z'
+        telemetryStream: null
+    EventObstacle:
+      value:
+        type: obstacle
+        testbedId: tb-sofia-robotics
+        payload: { location: tunnel-north-entrance, size: large }
+    TelemetryHighwayTwin:
+      value:
+        experimentId: ex-2027-0391
+        from: 0
+        to: 30
+        samples:
+        - t: 0
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 18
+            robotPosition: {x: -12.0, y: 0, z: 0.0}
+            robotSpeedMs: 0.8
+            workersOnSite: 6
+            sensorsOnline: 12
+        - t: 0
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 12, frameRate: 90, bandwidthMbps: 410, headsetsConnected: 2}
+        - t: 2
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 22
+            robotPosition: {x: -10.4, y: 0, z: 0.0}
+            robotSpeedMs: 0.8
+            workersOnSite: 6
+            sensorsOnline: 12
+        - t: 2
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 14, frameRate: 90, bandwidthMbps: 436, headsetsConnected: 2}
+        - t: 4
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 21
+            robotPosition: {x: -8.8, y: 0, z: 0.0}
+            robotSpeedMs: 0.8
+            workersOnSite: 6
+            sensorsOnline: 12
+        - t: 4
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 12, frameRate: 90, bandwidthMbps: 427, headsetsConnected: 2}
+        - t: 6
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 20
+            robotPosition: {x: -7.2, y: 0, z: 0.0}
+            robotSpeedMs: 0.8
+            workersOnSite: 6
+            sensorsOnline: 12
+        - t: 6
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 14, frameRate: 90, bandwidthMbps: 418, headsetsConnected: 2}
+        - t: 8
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 19
+            robotPosition: {x: -5.6, y: 0, z: 0.0}
+            robotSpeedMs: 0.8
+            workersOnSite: 6
+            sensorsOnline: 12
+        - t: 8
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 12, frameRate: 90, bandwidthMbps: 444, headsetsConnected: 2}
+        - t: 10
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 18
+            robotPosition: {x: -4.0, y: 0, z: 0.0}
+            robotSpeedMs: 0.8
+            workersOnSite: 6
+            sensorsOnline: 12
+        - t: 10
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 14, frameRate: 90, bandwidthMbps: 435, headsetsConnected: 2}
+        - t: 12
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 22
+            robotPosition: {x: -2.4, y: 0, z: 0.0}
+            robotSpeedMs: 0.8
+            workersOnSite: 6
+            sensorsOnline: 12
+        - t: 12
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 12, frameRate: 90, bandwidthMbps: 426, headsetsConnected: 2}
+        - t: 14
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 21
+            robotPosition: {x: -0.8, y: 0, z: 0.0}
+            robotSpeedMs: 0.8
+            workersOnSite: 6
+            sensorsOnline: 12
+        - t: 14
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 14, frameRate: 90, bandwidthMbps: 417, headsetsConnected: 2}
+        - t: 16
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 20
+            robotPosition: {x: 0.8, y: 0, z: 0.0}
+            robotSpeedMs: 0.8
+            workersOnSite: 6
+            sensorsOnline: 12
+        - t: 16
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 12, frameRate: 90, bandwidthMbps: 443, headsetsConnected: 2}
+        - t: 18
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 19
+            robotPosition: {x: 2.4, y: 0, z: 0.0}
+            robotSpeedMs: 0.8
+            workersOnSite: 6
+            sensorsOnline: 12
+        - t: 18
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 14, frameRate: 90, bandwidthMbps: 434, headsetsConnected: 2}
+        - t: 20
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 18
+            robotPosition: {x: 4.0, y: 0, z: 0.0}
+            robotSpeedMs: 0.8
+            workersOnSite: 6
+            sensorsOnline: 12
+          events:
+          - {type: zone-violation, severity: alarm, zoneId: red-zone-1, subject: worker-3, message: Worker entered red zone 1 (tunnel
+              entrance)}
+        - t: 20
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 12, frameRate: 87, bandwidthMbps: 425, headsetsConnected: 2}
+        - t: 22
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 22
+            robotPosition: {x: 4.8, y: 0, z: 0.0}
+            robotSpeedMs: 0.0
+            workersOnSite: 6
+            sensorsOnline: 12
+          events:
+          - {type: robot-stopped, severity: info, subject: robot-1, message: 'Robot stopped: safety rule, person within 5 m'}
+        - t: 22
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 14, frameRate: 90, bandwidthMbps: 416, headsetsConnected: 2}
+        - t: 24
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 21
+            robotPosition: {x: 4.8, y: 0, z: 0.0}
+            robotSpeedMs: 0.0
+            workersOnSite: 6
+            sensorsOnline: 12
+        - t: 24
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 12, frameRate: 90, bandwidthMbps: 442, headsetsConnected: 2}
+        - t: 26
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 20
+            robotPosition: {x: 5.6, y: 0, z: 0.0}
+            robotSpeedMs: 0.8
+            workersOnSite: 6
+            sensorsOnline: 12
+          events:
+          - {type: zone-cleared, severity: info, zoneId: red-zone-1, subject: worker-3, message: 'Red zone 1 clear, robot resumes'}
+        - t: 26
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 14, frameRate: 90, bandwidthMbps: 433, headsetsConnected: 2}
+        - t: 28
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 19
+            robotPosition: {x: 7.2, y: 0, z: 0.0}
+            robotSpeedMs: 0.8
+            workersOnSite: 6
+            sensorsOnline: 12
+        - t: 28
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 12, frameRate: 90, bandwidthMbps: 424, headsetsConnected: 2}
+        - t: 30
+          testbedId: tb-sofia-robotics
+          metrics:
+            latencyMs: 18
+            robotPosition: {x: 8.8, y: 0, z: 0.0}
+            robotSpeedMs: 0.8
+            workersOnSite: 6
+            sensorsOnline: 12
+        - t: 30
+          testbedId: tb-oulu-5g-xr
+          metrics: {latencyMs: 14, frameRate: 90, bandwidthMbps: 415, headsetsConnected: 2}
+    ResultsHighwayTwin:
+      value:
+        experimentId: ex-2027-0391
+        status: stopped
+        window: {start: '2027-02-03T09:03:00Z', end: '2027-02-03T09:48:30Z'}
+        metrics: {avgLatencyMs: 17.4, p95LatencyMs: 23, availabilityPct: 99.8, avgFrameRate: 89.7, eventsDetected: 3, samples: 2730}
+        perTestbed:
+        - {testbedId: tb-sofia-robotics, avgLatencyMs: 20.1, availabilityPct: 99.7, eventsDetected: 3}
+        - {testbedId: tb-oulu-5g-xr, avgLatencyMs: 13.6, availabilityPct: 99.9, eventsDetected: 0}
+        events:
+        - {t: 20, testbedId: tb-sofia-robotics, type: zone-violation, severity: alarm, message: Worker entered red zone 1 (tunnel
+            entrance)}
+        - {t: 22, testbedId: tb-sofia-robotics, type: robot-stopped, severity: info, message: 'Robot stopped: safety rule, person
+            within 5 m'}
+        - {t: 26, testbedId: tb-sofia-robotics, type: zone-cleared, severity: info, message: 'Red zone 1 clear, robot resumes'}
+        qosMet: true
+        reportUrl: /experiments/ex-2027-0391/results/report
+    AssetTunnelEntrance:
+      value:
+        id: as-tunnel-entrance
+        name: tunnel_entrance_v3
+        description: Highway tunnel north entrance, as built, week 5
+        format: model/gltf-binary
+        version: 3
+        status: processing
+        visibility: booking
+        sizeBytes: 1843200
+        ownerOrganisation: Demo construction company
+        createdAt: '2027-02-02T16:40:00Z'
+    AssetTunnelEntranceReady:
+      value:
+        id: as-tunnel-entrance
+        name: tunnel_entrance_v3
+        description: Highway tunnel north entrance, as built, week 5
+        format: model/gltf-binary
+        version: 3
+        status: ready
+        visibility: booking
+        sizeBytes: 1843200
+        ownerOrganisation: Demo construction company
+        createdAt: '2027-02-02T16:40:00Z'
     Catalogue:
       value:
         total: 10
