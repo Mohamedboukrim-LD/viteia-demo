@@ -17,6 +17,15 @@ npm run dev       # Vite on http://localhost:5173
 `npm run gen:api` regenerates `src/api/schema.d.ts` from the spec (also run by `npm run build`).
 Copy `.env.example` to `.env` to point the client at another API base URL.
 
+## Check
+
+```bash
+npm run lint:api  # Spectral: the spec is valid OpenAPI and follows the house rules (.spectral.yaml)
+npm test          # Vitest: client and store logic
+```
+
+Run both before sending a tranche for review.
+
 ## Recording mode
 
 Every scene is a route. The space bar runs the next step of the current scene
@@ -31,8 +40,9 @@ openapi/openapi.yaml      the specification (the only real piece)
 src/api/client.ts         single entry point for every API call, typed from the spec
 src/store/demoStore.ts    demo state shared across scenes
 src/director/             recording steps and the space-bar hook
+src/data/proposal.ts      scripted content of scene 2 (no LLM)
 src/scenes/               one component per scene (route)
-src/components/           map, filters, list
+src/components/           map, filters, list, assistant chat, API panel
 src/styles/tokens.css     temporary design tokens, to be replaced by the final design
 ```
 
@@ -48,8 +58,8 @@ src/styles/tokens.css     temporary design tokens, to be replaced by the final d
 
 | # | Category | Spec | Mock | Scene | Status |
 |---|----------|------|------|-------|--------|
-| 1 | testbeds | done | done | Catalogue (scene 1) | ready for review |
-| 2 | bookings | | | Request (scene 2) | |
+| 1 | testbeds | done | done | Catalogue (scene 1) | tested |
+| 2 | bookings | done | done | Request (scene 2) | ready for review |
 | 3 | experiments | | | Request (scene 2) | |
 | 4 | telemetry, results | | | Digital twin (scene 3), Results (scene 4) | |
 | 5 | assets | | | Request (scene 2, one line) | |
@@ -62,3 +72,16 @@ src/styles/tokens.css     temporary design tokens, to be replaced by the final d
 - The mock ignores query filters and returns the whole catalogue; the client filters.
 - Errors use RFC 9457 problem details.
 - TypeScript is pinned to 5.x because `openapi-typescript` does not support 7.x yet.
+
+## Decisions taken in tranche 2
+
+- A booking reserves capabilities on one or more testbeds for a time window.
+  An experiment (tranche 3) runs inside a confirmed booking. Separate resources,
+  because a booking can exist without an experiment (reserved, then cancelled).
+- The user sends a `QoSRequirement` (what they need); each allocation answers
+  with a `guaranteedQos` (what the testbed commits to). A multi-testbed booking
+  is confirmed only if every part is satisfiable; otherwise 422 with `violations`.
+- Capability ids come from `GET /testbeds/{id}/capabilities`; the booking
+  request references them, it does not describe hardware again.
+- Scene 2 is driven by a `requestPhase` in the store so the director can
+  replay it identically; the assistant's text is scripted in `src/data/proposal.ts`.

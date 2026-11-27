@@ -34,5 +34,23 @@ export const steps: Record<string, Step[]> = {
       run: (navigate) => navigate("/request"),
     },
   ],
-  // Tranche 2+: "/request", "/twin", "/results"
+  "/request": [
+    {
+      label: "Type the request",
+      run: () => useDemoStore.getState().setRequestPhase("typing"),
+    },
+    {
+      label: "Assistant proposes two testbeds",
+      run: () => useDemoStore.getState().setRequestPhase("proposed"),
+    },
+    {
+      label: "Book the resources (POST /bookings)",
+      run: () => useDemoStore.getState().setRequestPhase("booking"),
+    },
+    {
+      label: "Go to the digital twin",
+      run: (navigate) => navigate("/twin"),
+    },
+  ],
+  // Tranche 3+: "/twin", "/results"
 };

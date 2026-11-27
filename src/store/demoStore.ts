@@ -1,7 +1,9 @@
 import { create } from "zustand";
-import type { Domain, Testbed } from "../api/client";
+import type { Booking, BookingRequest, Domain, Testbed } from "../api/client";
 
 export type Theme = "default" | "contrast";
+
+export type RequestPhase = "idle" | "typing" | "sent" | "proposed" | "booking" | "booked";
 
 type DemoState = {
   theme: Theme;
@@ -13,9 +15,16 @@ type DemoState = {
   toggleDomain: (domain: Domain) => void;
   setDomains: (domains: Domain[]) => void;
 
-  // Filled by the request scene (tranche 2+). Kept here so later scenes read it.
-  selectedTestbedIds: string[];
-  setSelectedTestbedIds: (ids: string[]) => void;
+  // Request scene
+  requestPhase: RequestPhase;
+  setRequestPhase: (phase: RequestPhase) => void;
+  requestText: string;
+  setRequestText: (text: string) => void;
+  proposal: BookingRequest | null;
+  setProposal: (p: BookingRequest | null) => void;
+  booking: Booking | null;
+  setBooking: (b: Booking | null) => void;
+  // Experiment scene (tranche 3)
   experimentId: string | null;
   setExperimentId: (id: string | null) => void;
 
@@ -26,7 +35,10 @@ const initial = {
   theme: "default" as Theme,
   testbeds: [] as Testbed[],
   activeDomains: [] as Domain[],
-  selectedTestbedIds: [] as string[],
+  requestPhase: "idle" as RequestPhase,
+  requestText: "",
+  proposal: null as BookingRequest | null,
+  booking: null as Booking | null,
   experimentId: null as string | null,
 };
 
@@ -41,7 +53,10 @@ export const useDemoStore = create<DemoState>((set) => ({
         : [...s.activeDomains, domain],
     })),
   setDomains: (activeDomains) => set({ activeDomains }),
-  setSelectedTestbedIds: (selectedTestbedIds) => set({ selectedTestbedIds }),
+  setRequestPhase: (requestPhase) => set({ requestPhase }),
+  setRequestText: (requestText) => set({ requestText }),
+  setProposal: (proposal) => set({ proposal }),
+  setBooking: (booking) => set({ booking }),
   setExperimentId: (experimentId) => set({ experimentId }),
   // Theme survives a reset on purpose: the recording starts in the chosen theme.
   reset: () => set((s) => ({ ...initial, theme: s.theme })),

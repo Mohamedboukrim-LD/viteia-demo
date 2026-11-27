@@ -33,7 +33,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get one testbed */
+        /**
+         * Get one testbed
+         * @description Full record of a testbed, including its latest conformance result.
+         */
         get: operations["getTestbed"];
         put?: never;
         post?: never;
@@ -60,6 +63,54 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Book resources on one or more testbeds
+         * @description The federation checks each requested capability against the testbed's
+         *     catalogue (quantity available, QoS guaranteed) and answers with the
+         *     booking and its status. A multi-testbed booking is confirmed only if
+         *     every testbed can satisfy its part; otherwise it is rejected with the
+         *     violations listed, so the client can propose an alternative.
+         */
+        post: operations["createBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bookings/{bookingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one booking
+         * @description Current status of a booking and the QoS each testbed guaranteed.
+         */
+        get: operations["getBooking"];
+        put?: never;
+        post?: never;
+        /**
+         * Cancel a booking
+         * @description Allowed until the booking window starts. Running experiments are not affected by a cancellation request; they must be stopped first (tranche 3).
+         */
+        delete: operations["cancelBooking"];
         options?: never;
         head?: never;
         patch?: never;
@@ -132,6 +183,58 @@ export interface components {
             testbedId: string;
             items: components["schemas"]["Capability"][];
         };
+        TimeWindow: {
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+        };
+        /** @description What the user needs. Compared with the testbed's QoSProfile. */
+        QoSRequirement: {
+            maxLatencyMs?: number;
+            minFrameRate?: number;
+        };
+        ResourceRequest: {
+            testbedId: string;
+            /** @description From `GET /testbeds/{testbedId}/capabilities`. */
+            capabilityId: string;
+            quantity: number;
+        };
+        ResourceAllocation: components["schemas"]["ResourceRequest"] & {
+            guaranteedQos: components["schemas"]["QoSProfile"];
+        };
+        BookingRequest: {
+            /** @description Free text, as the user wrote it. Kept for the report. */
+            purpose?: string;
+            window: components["schemas"]["TimeWindow"];
+            resources: components["schemas"]["ResourceRequest"][];
+            qos?: components["schemas"]["QoSRequirement"];
+        };
+        /** @enum {string} */
+        BookingStatus: "pending" | "confirmed" | "rejected" | "cancelled";
+        Booking: {
+            id: string;
+            status: components["schemas"]["BookingStatus"];
+            purpose?: string;
+            window: components["schemas"]["TimeWindow"];
+            resources: components["schemas"]["ResourceAllocation"][];
+            qos?: components["schemas"]["QoSRequirement"];
+            /** @description Convenience list of the testbeds involved. */
+            testbedIds?: string[];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        QoSViolation: {
+            testbedId: string;
+            capabilityId?: string;
+            /** @enum {string} */
+            field: "maxLatencyMs" | "minFrameRate" | "quantity";
+            requested: number;
+            available: number | null;
+        };
+        BookingProblem: components["schemas"]["Problem"] & {
+            violations?: components["schemas"]["QoSViolation"][];
+        };
         /** @description Error body, RFC 9457. */
         Problem: {
             /** Format: uri */
@@ -177,6 +280,7 @@ export interface components {
     };
     parameters: {
         TestbedId: string;
+        BookingId: string;
     };
     requestBodies: never;
     headers: never;
@@ -255,6 +359,116 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    createBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookingRequest"];
+            };
+        };
+        responses: {
+            /** @description The booking was created. Check `status`. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Booking"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The request cannot be satisfied as written. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://api.viteia.example/problems/qos-not-satisfiable",
+                     *       "title": "Requested QoS cannot be guaranteed",
+                     *       "status": 422,
+                     *       "violations": [
+                     *         {
+                     *           "testbedId": "tb-lisbon-iot",
+                     *           "capabilityId": "cap-lidar-array",
+                     *           "field": "maxLatencyMs",
+                     *           "requested": 20,
+                     *           "available": 80
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["BookingProblem"];
+                };
+            };
+        };
+    };
+    getBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The booking. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Booking"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cancelBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancelled. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            /** @description The booking window has already started. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://api.viteia.example/problems/booking-started",
+                     *       "title": "Booking already started",
+                     *       "status": 409
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
 }

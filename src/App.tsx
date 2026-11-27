@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { useDirector } from "./director/useDirector";
 import { Catalog } from "./scenes/Catalog";
+import { Request } from "./scenes/Request";
 import { useDemoStore } from "./store/demoStore";
 
 const SCENE_TITLE: Record<string, string> = {
@@ -42,8 +43,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/catalog" replace />} />
           <Route path="/catalog" element={<Catalog />} />
-          <Route path="/request" element={<Placeholder name="Request" tranche="tranche 2 (bookings) and 3 (experiments)" />} />
-          <Route path="/twin" element={<Placeholder name="Digital twin" tranche="tranche 4 (telemetry)" />} />
+          <Route path="/request" element={<Request />} />
+          <Route path="/twin" element={<Placeholder name="Digital twin" tranche="tranche 3 (experiments) and 4 (telemetry)" />} />
           <Route path="/results" element={<Placeholder name="Results" tranche="tranche 4 (results)" />} />
         </Routes>
       </main>

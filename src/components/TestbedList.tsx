@@ -20,7 +20,7 @@ const DOMAIN_LABEL: Record<string, string> = {
 
 export function TestbedList({ testbeds, total, highlightedId, onSelect }: Props) {
   return (
-    <section aria-label="Testbeds">
+    <section className="list-section" aria-label="Testbeds">
       <p className="list__summary" aria-live="polite">
         {testbeds.length === total
           ? `${total} testbeds in the federation`

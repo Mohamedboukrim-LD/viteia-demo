@@ -1,16 +1,16 @@
 openapi: 3.1.0
 info:
   title: VITEIA TaaS API
-  version: 0.1.0
+  version: 0.2.0
   summary: Unified API for discovering, booking and running experiments on federated Virtual Worlds testbeds.
   description: |
     Draft specification prepared by Lasting Dynamics as the seed of task T3.3
     (VW TaaS APIs and interoperability requirements, deliverable D3.3).
 
-    The API is organised by resource category. Tranche 1 (this version) specifies
-    the `testbeds` category. The other categories are declared as tags and will be
-    specified in the next tranches, in this order: bookings, experiments,
-    telemetry, results, assets, identity.
+    The API is organised by resource category. Tranche 1 specified `testbeds`,
+    tranche 2 (this version) specifies `bookings`. The other categories are
+    declared as tags and will be specified in the next tranches, in this order:
+    experiments, telemetry, results, assets, identity.
 
     All data in the examples is fictional demo data for the kick-off video.
     It does not describe any real partner facility.
@@ -26,7 +26,10 @@ tags:
   - name: testbeds
     description: Catalogue of federated testbeds, their location, status and capabilities.
   - name: bookings
-    description: Reservation of testbed resources for a time window, with declared QoS requirements. (Tranche 2)
+    description: |
+      Reservation of testbed resources for a time window, with the QoS the user
+      needs. A booking is the precondition of an experiment: the experiment
+      (tranche 3) runs inside a confirmed booking.
   - name: experiments
     description: Creation, start, stimulation and stop of experiments, including multi-testbed workflows. (Tranche 3)
   - name: telemetry
@@ -91,6 +94,7 @@ paths:
       tags: [testbeds]
       operationId: getTestbed
       summary: Get one testbed
+      description: Full record of a testbed, including its latest conformance result.
       parameters:
         - $ref: '#/components/parameters/TestbedId'
       responses:
@@ -148,6 +152,98 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /bookings:
+    post:
+      tags: [bookings]
+      operationId: createBooking
+      summary: Book resources on one or more testbeds
+      description: |
+        The federation checks each requested capability against the testbed's
+        catalogue (quantity available, QoS guaranteed) and answers with the
+        booking and its status. A multi-testbed booking is confirmed only if
+        every testbed can satisfy its part; otherwise it is rejected with the
+        violations listed, so the client can propose an alternative.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingRequest'
+            examples:
+              highwayTwin:
+                $ref: '#/components/examples/BookingRequestHighwayTwin'
+      responses:
+        '201':
+          description: The booking was created. Check `status`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+              examples:
+                confirmed:
+                  $ref: '#/components/examples/BookingConfirmed'
+        '422':
+          description: The request cannot be satisfied as written.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/BookingProblem'
+              example:
+                type: https://api.viteia.example/problems/qos-not-satisfiable
+                title: Requested QoS cannot be guaranteed
+                status: 422
+                violations:
+                  - testbedId: tb-lisbon-iot
+                    capabilityId: cap-lidar-array
+                    field: maxLatencyMs
+                    requested: 20
+                    available: 80
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /bookings/{bookingId}:
+    get:
+      tags: [bookings]
+      operationId: getBooking
+      summary: Get one booking
+      description: Current status of a booking and the QoS each testbed guaranteed.
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '200':
+          description: The booking.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+              examples:
+                confirmed:
+                  $ref: '#/components/examples/BookingConfirmed'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [bookings]
+      operationId: cancelBooking
+      summary: Cancel a booking
+      description: Allowed until the booking window starts. Running experiments are not affected by a cancellation request; they must be stopped first (tranche 3).
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '204':
+          description: Cancelled.
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The booking window has already started.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.viteia.example/problems/booking-started
+                title: Booking already started
+                status: 409
+
 components:
   parameters:
     TestbedId:
@@ -158,6 +254,14 @@ components:
         type: string
         pattern: '^tb-[a-z0-9-]+$'
         example: tb-sofia-robotics
+    BookingId:
+      name: bookingId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^bk-[a-z0-9-]+$'
+        example: bk-2027-0142
 
   responses:
     NotFound:
@@ -314,6 +418,126 @@ components:
           items:
             $ref: '#/components/schemas/Capability'
 
+    TimeWindow:
+      type: object
+      required: [start, end]
+      properties:
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+
+    QoSRequirement:
+      type: object
+      description: What the user needs. Compared with the testbed's QoSProfile.
+      properties:
+        maxLatencyMs:
+          type: integer
+          minimum: 0
+        minFrameRate:
+          type: integer
+          minimum: 0
+
+    ResourceRequest:
+      type: object
+      required: [testbedId, capabilityId, quantity]
+      properties:
+        testbedId:
+          type: string
+        capabilityId:
+          type: string
+          description: From `GET /testbeds/{testbedId}/capabilities`.
+        quantity:
+          type: integer
+          minimum: 1
+
+    ResourceAllocation:
+      allOf:
+        - $ref: '#/components/schemas/ResourceRequest'
+        - type: object
+          required: [guaranteedQos]
+          properties:
+            guaranteedQos:
+              $ref: '#/components/schemas/QoSProfile'
+
+    BookingRequest:
+      type: object
+      required: [window, resources]
+      properties:
+        purpose:
+          type: string
+          description: Free text, as the user wrote it. Kept for the report.
+          maxLength: 500
+        window:
+          $ref: '#/components/schemas/TimeWindow'
+        resources:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ResourceRequest'
+        qos:
+          $ref: '#/components/schemas/QoSRequirement'
+
+    BookingStatus:
+      type: string
+      enum: [pending, confirmed, rejected, cancelled]
+
+    Booking:
+      type: object
+      required: [id, status, window, resources, createdAt]
+      properties:
+        id:
+          type: string
+          pattern: '^bk-[a-z0-9-]+$'
+        status:
+          $ref: '#/components/schemas/BookingStatus'
+        purpose:
+          type: string
+        window:
+          $ref: '#/components/schemas/TimeWindow'
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceAllocation'
+        qos:
+          $ref: '#/components/schemas/QoSRequirement'
+        testbedIds:
+          type: array
+          description: Convenience list of the testbeds involved.
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    QoSViolation:
+      type: object
+      required: [testbedId, field, requested, available]
+      properties:
+        testbedId:
+          type: string
+        capabilityId:
+          type: string
+        field:
+          type: string
+          enum: [maxLatencyMs, minFrameRate, quantity]
+        requested:
+          type: number
+        available:
+          type: [number, 'null']
+
+    BookingProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            violations:
+              type: array
+              items:
+                $ref: '#/components/schemas/QoSViolation'
+
     Problem:
       type: object
       description: Error body, RFC 9457.
@@ -349,6 +573,31 @@ components:
         engines: [unity]
         qos: { maxLatencyMs: 30, minFrameRate: 60 }
         conformance: { passed: 112, total: 112, runAt: '2027-01-10T09:00:00Z' }
+    BookingRequestHighwayTwin:
+      summary: Two testbeds for a highway-construction digital twin test
+      value:
+        purpose: Test a digital twin of a highway construction site with a robot inspecting a tunnel
+        window: { start: '2027-02-03T09:00:00Z', end: '2027-02-03T11:00:00Z' }
+        resources:
+          - { testbedId: tb-sofia-robotics, capabilityId: cap-quadruped-01, quantity: 1 }
+          - { testbedId: tb-sofia-robotics, capabilityId: cap-dt-engine, quantity: 1 }
+          - { testbedId: tb-oulu-5g-xr, capabilityId: cap-5g-slice, quantity: 1 }
+          - { testbedId: tb-oulu-5g-xr, capabilityId: cap-xr-headset, quantity: 2 }
+        qos: { maxLatencyMs: 20, minFrameRate: 90 }
+    BookingConfirmed:
+      value:
+        id: bk-2027-0142
+        status: confirmed
+        purpose: Test a digital twin of a highway construction site with a robot inspecting a tunnel
+        window: { start: '2027-02-03T09:00:00Z', end: '2027-02-03T11:00:00Z' }
+        resources:
+          - { testbedId: tb-sofia-robotics, capabilityId: cap-quadruped-01, quantity: 1, guaranteedQos: { maxLatencyMs: 18, minFrameRate: null } }
+          - { testbedId: tb-sofia-robotics, capabilityId: cap-dt-engine, quantity: 1, guaranteedQos: { maxLatencyMs: 20, minFrameRate: 90 } }
+          - { testbedId: tb-oulu-5g-xr, capabilityId: cap-5g-slice, quantity: 1, guaranteedQos: { maxLatencyMs: 12, minFrameRate: null } }
+          - { testbedId: tb-oulu-5g-xr, capabilityId: cap-xr-headset, quantity: 2, guaranteedQos: { maxLatencyMs: 20, minFrameRate: 90 } }
+        qos: { maxLatencyMs: 20, minFrameRate: 90 }
+        testbedIds: [tb-sofia-robotics, tb-oulu-5g-xr]
+        createdAt: '2027-01-20T10:15:00Z'
     Catalogue:
       value:
         total: 10
