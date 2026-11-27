@@ -40,6 +40,7 @@ openapi/openapi.yaml      the specification (the only real piece)
 src/api/client.ts         single entry point for every API call, typed from the spec
 src/store/demoStore.ts    demo state shared across scenes
 src/director/             recording steps and the space-bar hook
+src/api/auth.ts           federation token, obtained once before the first call
 src/api/log.ts            log of the API calls made, shown by the API panel
 src/telemetry/useReplay.ts replays a telemetry batch in real time
 src/data/proposal.ts      scripted content of scenes 2 and 3 (no LLM)
@@ -64,8 +65,8 @@ src/styles/tokens.css     temporary design tokens, to be replaced by the final d
 | 2 | bookings | done | done | Request (scene 2) | tested |
 | 3 | experiments | done | done | Request (scene 2), Digital twin (scene 3) | tested |
 | 4 | telemetry, results | done | done | Digital twin (scene 3), Results (scene 4) | tested |
-| 5 | assets | done | done | Request (scene 2, one line) | ready for review |
-| 6 | identity | | | none | |
+| 5 | assets | done | done | Request (scene 2, one line) | tested |
+| 6 | identity | done | done | none | ready for review |
 
 ## Decisions taken in tranche 1
 
@@ -132,3 +133,18 @@ src/styles/tokens.css     temporary design tokens, to be replaced by the final d
 - In the demo the file is a 16-byte placeholder named `tunnel_entrance_v3.glb`;
   the mock accepts any upload. The experiment request references the asset id
   in `scenario.assetIds`.
+
+## Decisions taken in tranche 6
+
+- Every operation except `POST /auth/token` requires a bearer token
+  (`security` at the top of the spec). The mock enforces the presence of the
+  header and accepts any value.
+- Two grants: `federated` for a person already signed in at a trusted identity
+  provider (the portal exchanges the provider's ID token), `client_credentials`
+  for services such as testbed adapters. Scopes map one to one onto the
+  categories; roles are `user`, `testbed-operator`, `federation-admin`.
+- Trusted providers, token lifetime and refresh belong to the security
+  framework of T2.4 (SmartAvatar); the spec defines the surface only.
+- The demo has no sign-in scene: `src/api/auth.ts` obtains the token silently
+  before the first call and the client sends it on every request. That call is
+  not shown in the API panel.

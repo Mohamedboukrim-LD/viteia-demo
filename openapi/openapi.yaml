@@ -1,16 +1,15 @@
 openapi: 3.1.0
 info:
   title: VITEIA TaaS API
-  version: 0.5.0
+  version: 0.6.0
   summary: Unified API for discovering, booking and running experiments on federated Virtual Worlds testbeds.
   description: |
     Draft specification prepared by Lasting Dynamics as the seed of task T3.3
     (VW TaaS APIs and interoperability requirements, deliverable D3.3).
 
-    The API is organised by resource category. Tranche 1 specified `testbeds`,
-    tranche 2 `bookings`, tranche 3 `experiments`, tranche 4 `telemetry` and
-    `results`, tranche 5 (this version) `assets`. `identity` is declared as a
-    tag and will be specified in tranche 6.
+    The API is organised by resource category: testbeds, bookings, experiments,
+    telemetry, results, assets and identity. Every operation except
+    `POST /auth/token` requires a bearer token issued by the federation.
 
     All data in the examples is fictional demo data for the kick-off video.
     It does not describe any real partner facility.
@@ -21,6 +20,9 @@ servers:
     description: Local mock server (Prism). Prism matches raw paths, so the version prefix is omitted here.
   - url: https://api.viteia.example/v1
     description: Placeholder for the future gateway
+
+security:
+  - bearerAuth: []
 
 tags:
   - name: testbeds
@@ -49,7 +51,16 @@ tags:
       load them. An asset has versions and a visibility that decides which
       testbeds may read it. An experiment references assets by id in its scenario.
   - name: identity
-    description: Authentication and authorisation, aligned with the security framework of T2.4. (Tranche 6)
+    description: |
+      Who is calling and what they may do. A person signs in at their own
+      organisation's identity provider; the portal exchanges that identity for
+      a federation token. A service (a testbed adapter, an integration) uses
+      client credentials. The token carries scopes, one per category:
+      `testbeds:read`, `bookings:write`, `experiments:write`, `telemetry:read`,
+      `results:read`, `assets:write`, plus `testbeds:operate` for testbed
+      operators. Token lifetime, refresh and the trusted identity providers are
+      defined by the security framework of T2.4 (SmartAvatar); this category
+      defines the surface the portal and the testbeds use.
 
 paths:
   /testbeds:
@@ -623,6 +634,77 @@ paths:
                   - { version: 1, sizeBytes: 1650000, status: ready, createdAt: '2027-01-19T09:30:00Z' }
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /auth/token:
+    post:
+      tags: [identity]
+      operationId: issueToken
+      security: []
+      summary: Obtain a federation token
+      description: |
+        Two grants. `federated`: the caller is a person already signed in at a
+        trusted identity provider; the portal sends the provider's ID token and
+        receives a federation token with the person's scopes.
+        `client_credentials`: the caller is a service with an id and a secret.
+        The mock accepts any request and answers with a demo token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+            examples:
+              federated:
+                value: { grantType: federated, idToken: eyJhbGciOi…, scope: "testbeds:read bookings:write experiments:write telemetry:read results:read assets:write" }
+              service:
+                value: { grantType: client_credentials, clientId: sofia-robotics-adapter, clientSecret: "…", scope: "testbeds:operate telemetry:read" }
+      responses:
+        '200':
+          description: The token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+              example:
+                accessToken: demo.federation.token
+                tokenType: Bearer
+                expiresIn: 3600
+                scope: "testbeds:read bookings:write experiments:write telemetry:read results:read assets:write"
+        '401':
+          description: Unknown client, invalid secret, or ID token not trusted.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://api.viteia.example/problems/invalid-grant
+                title: Credentials not accepted
+                status: 401
+
+  /auth/me:
+    get:
+      tags: [identity]
+      operationId: getPrincipal
+      summary: Who am I
+      description: The identity behind the current token, its organisation, roles and scopes. Used by the portal to decide what to show.
+      responses:
+        '200':
+          description: The principal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Principal'
+              example:
+                subject: usr-7f3a
+                kind: person
+                displayName: Demo user
+                organisation: { id: org-demo-construction, name: Demo construction company, country: BG }
+                roles: [user]
+                scopes: [testbeds:read, bookings:write, experiments:write, telemetry:read, results:read, assets:write]
+                testbedIds: []
+                expiresAt: '2027-02-03T10:03:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
 components:
   parameters:
@@ -1262,6 +1344,96 @@ components:
           items:
             $ref: '#/components/schemas/AssetVersion'
 
+    Scope:
+      type: string
+      enum: [testbeds:read, testbeds:operate, bookings:write, experiments:write, telemetry:read, results:read, assets:write]
+
+    Role:
+      type: string
+      description: |
+        `user`: books and runs experiments for an organisation. `testbed-operator`:
+        manages one or more testbeds and sees their bookings. `federation-admin`:
+        manages the catalogue and the conformance of testbeds.
+      enum: [user, testbed-operator, federation-admin]
+
+    TokenRequest:
+      type: object
+      required: [grantType]
+      properties:
+        grantType:
+          type: string
+          enum: [federated, client_credentials]
+        idToken:
+          type: string
+          description: Required for `federated`. ID token from a trusted identity provider.
+        clientId:
+          type: string
+          description: Required for `client_credentials`.
+        clientSecret:
+          type: string
+          description: Required for `client_credentials`.
+        scope:
+          type: string
+          description: Space-separated scopes requested; the federation may grant fewer.
+
+    TokenResponse:
+      type: object
+      required: [accessToken, tokenType, expiresIn]
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+          enum: [Bearer]
+        expiresIn:
+          type: integer
+          description: Seconds until the token expires.
+        scope:
+          type: string
+
+    Organisation:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        country:
+          type: string
+          minLength: 2
+          maxLength: 2
+
+    Principal:
+      type: object
+      required: [subject, kind, organisation, roles, scopes, expiresAt]
+      properties:
+        subject:
+          type: string
+        kind:
+          type: string
+          enum: [person, service]
+        displayName:
+          type: string
+        organisation:
+          $ref: '#/components/schemas/Organisation'
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Scope'
+        testbedIds:
+          type: array
+          description: Testbeds this principal operates (role `testbed-operator`).
+          items:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+
     Problem:
       type: object
       description: Error body, RFC 9457.
@@ -1282,7 +1454,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Defined in the identity tranche. Not enforced by the mock.
+      description: Federation token from `POST /auth/token`. The mock requires the header to be present and accepts any value.
 
   examples:
     SofiaRobotics:

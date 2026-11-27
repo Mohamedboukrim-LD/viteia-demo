@@ -1,11 +1,36 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { auth } from "./auth";
 import { api, ApiError } from "./client";
 import { EXPERIMENT_REQUEST, PROPOSAL } from "../data/proposal";
 
 const jsonResponse = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
+beforeEach(() => auth.set("test-token"));
 afterEach(() => vi.restoreAllMocks());
+
+describe("authentication", () => {
+  it("sends the federation token as a bearer on every call", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse(200, { items: [], total: 0 }));
+    await api.listTestbeds();
+    const headers = fetchMock.mock.calls[0][1]?.headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer test-token");
+  });
+
+  it("obtains the token once before the first call when none is set", async () => {
+    auth.set(null);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) =>
+      String(url).endsWith("/auth/token")
+        ? jsonResponse(200, { accessToken: "fresh", tokenType: "Bearer", expiresIn: 3600 })
+        : jsonResponse(200, { items: [], total: 0 }),
+    );
+    await api.listTestbeds();
+    await api.listTestbeds();
+    const paths = fetchMock.mock.calls.map(([u]) => String(u));
+    expect(paths.filter((p) => p.endsWith("/auth/token"))).toHaveLength(1);
+    expect((fetchMock.mock.calls[2][1]?.headers as Record<string, string>).Authorization).toBe("Bearer fresh");
+  });
+});
 
 describe("api.createBooking", () => {
   it("posts the booking request as JSON and returns the booking", async () => {

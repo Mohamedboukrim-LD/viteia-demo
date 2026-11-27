@@ -1,3 +1,4 @@
+import { auth } from "./auth";
 import type { components, paths } from "./schema";
 
 export type Testbed = components["schemas"]["Testbed"];
@@ -42,10 +43,12 @@ async function readError(res: Response, method: string, path: string): Promise<A
   return new ApiError(res.status, `${res.status} ${res.statusText} on ${method} ${path}`, problem);
 }
 
+async function authHeaders(): Promise<Record<string, string>> {
+  return { Accept: "application/json", Authorization: `Bearer ${await auth.token()}` };
+}
+
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { Accept: "application/json" },
-  });
+  const res = await fetch(`${BASE}${path}`, { headers: await authHeaders() });
   if (!res.ok) throw await readError(res, "GET", path);
   return (await res.json()) as T;
 }
@@ -53,7 +56,7 @@ async function get<T>(path: string): Promise<T> {
 async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) throw await readError(res, "POST", path);
@@ -62,13 +65,13 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
 
 async function postForm<T>(path: string, form: FormData): Promise<T> {
   // No Content-Type header: the browser sets multipart/form-data with the boundary.
-  const res = await fetch(`${BASE}${path}`, { method: "POST", headers: { Accept: "application/json" }, body: form });
+  const res = await fetch(`${BASE}${path}`, { method: "POST", headers: await authHeaders(), body: form });
   if (!res.ok) throw await readError(res, "POST", path);
   return (await res.json()) as T;
 }
 
 async function del(path: string): Promise<void> {
-  const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
+  const res = await fetch(`${BASE}${path}`, { method: "DELETE", headers: await authHeaders() });
   if (!res.ok) throw await readError(res, "DELETE", path);
 }
 

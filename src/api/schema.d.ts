@@ -341,6 +341,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Obtain a federation token
+         * @description Two grants. `federated`: the caller is a person already signed in at a
+         *     trusted identity provider; the portal sends the provider's ID token and
+         *     receives a federation token with the person's scopes.
+         *     `client_credentials`: the caller is a service with an id and a secret.
+         *     The mock accepts any request and answers with a demo token.
+         */
+        post: operations["issueToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who am I
+         * @description The identity behind the current token, its organisation, roles and scopes. Used by the portal to decide what to show.
+         */
+        get: operations["getPrincipal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -626,6 +670,53 @@ export interface components {
         AssetVersionList: {
             assetId: string;
             items: components["schemas"]["AssetVersion"][];
+        };
+        /** @enum {string} */
+        Scope: "testbeds:read" | "testbeds:operate" | "bookings:write" | "experiments:write" | "telemetry:read" | "results:read" | "assets:write";
+        /**
+         * @description `user`: books and runs experiments for an organisation. `testbed-operator`:
+         *     manages one or more testbeds and sees their bookings. `federation-admin`:
+         *     manages the catalogue and the conformance of testbeds.
+         * @enum {string}
+         */
+        Role: "user" | "testbed-operator" | "federation-admin";
+        TokenRequest: {
+            /** @enum {string} */
+            grantType: "federated" | "client_credentials";
+            /** @description Required for `federated`. ID token from a trusted identity provider. */
+            idToken?: string;
+            /** @description Required for `client_credentials`. */
+            clientId?: string;
+            /** @description Required for `client_credentials`. */
+            clientSecret?: string;
+            /** @description Space-separated scopes requested; the federation may grant fewer. */
+            scope?: string;
+        };
+        TokenResponse: {
+            accessToken: string;
+            /** @enum {string} */
+            tokenType: "Bearer";
+            /** @description Seconds until the token expires. */
+            expiresIn: number;
+            scope?: string;
+        };
+        Organisation: {
+            id: string;
+            name: string;
+            country?: string;
+        };
+        Principal: {
+            subject: string;
+            /** @enum {string} */
+            kind: "person" | "service";
+            displayName?: string;
+            organisation: components["schemas"]["Organisation"];
+            roles: components["schemas"]["Role"][];
+            scopes: components["schemas"]["Scope"][];
+            /** @description Testbeds this principal operates (role `testbed-operator`). */
+            testbedIds?: string[];
+            /** Format: date-time */
+            expiresAt: string;
         };
         /** @description Error body, RFC 9457. */
         Problem: {
@@ -1288,6 +1379,100 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    issueToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenRequest"];
+            };
+        };
+        responses: {
+            /** @description The token. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "accessToken": "demo.federation.token",
+                     *       "tokenType": "Bearer",
+                     *       "expiresIn": 3600,
+                     *       "scope": "testbeds:read bookings:write experiments:write telemetry:read results:read assets:write"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Unknown client, invalid secret, or ID token not trusted. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://api.viteia.example/problems/invalid-grant",
+                     *       "title": "Credentials not accepted",
+                     *       "status": 401
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getPrincipal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The principal. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "subject": "usr-7f3a",
+                     *       "kind": "person",
+                     *       "displayName": "Demo user",
+                     *       "organisation": {
+                     *         "id": "org-demo-construction",
+                     *         "name": "Demo construction company",
+                     *         "country": "BG"
+                     *       },
+                     *       "roles": [
+                     *         "user"
+                     *       ],
+                     *       "scopes": [
+                     *         "testbeds:read",
+                     *         "bookings:write",
+                     *         "experiments:write",
+                     *         "telemetry:read",
+                     *         "results:read",
+                     *         "assets:write"
+                     *       ],
+                     *       "testbedIds": [],
+                     *       "expiresAt": "2027-02-03T10:03:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Principal"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
 }
